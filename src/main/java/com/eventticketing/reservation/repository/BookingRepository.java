@@ -1,0 +1,36 @@
+package com.eventticketing.reservation.repository;
+
+import com.eventticketing.reservation.domain.Booking;
+import com.eventticketing.reservation.domain.BookingStatus;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.time.Instant;
+import java.util.List;
+
+public interface BookingRepository extends JpaRepository<Booking, Long> {
+
+    List<Booking> findByStatusAndExpiresAtBefore(BookingStatus status, Instant time);
+
+    List<Booking> findByEventIdAndStatusAndExpiresAtBefore(Long eventId, BookingStatus status, Instant time);
+
+    /** Confirmed (paid) units for a non-seated event; these always occupy capacity. */
+    @Query("""
+            select coalesce(sum(b.quantity), 0)
+            from Booking b
+            where b.event.id = :eventId
+              and b.status = com.eventticketing.reservation.domain.BookingStatus.CONFIRMED
+            """)
+    long sumConfirmedQuantity(@Param("eventId") Long eventId);
+
+    /** Reserved (pending, unexpired) units for a non-seated event. */
+    @Query("""
+            select coalesce(sum(b.quantity), 0)
+            from Booking b
+            where b.event.id = :eventId
+              and b.status = com.eventticketing.reservation.domain.BookingStatus.PENDING_PAYMENT
+              and b.expiresAt > :now
+            """)
+    long sumReservedQuantity(@Param("eventId") Long eventId, @Param("now") Instant now);
+}

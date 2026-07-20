@@ -18,9 +18,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    baseline-on-migrate: true
 
 app:
+  # Set to true to load a small predefined catalog on startup (see DemoDataSeeder).
+  seed-demo-data: ${SEED_DEMO_DATA:false}
   reservation:
     # ISO-8601 duration. How long a seat stays HELD before auto-release if unpaid.
     hold-duration: PT10M

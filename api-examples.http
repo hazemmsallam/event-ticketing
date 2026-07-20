@@ -1,0 +1,109 @@
+### Event Ticketing API — sample requests
+### Use with the IntelliJ HTTP client or the VS Code "REST Client" extension.
+@host = http://localhost:8080
+
+############################################################
+# CATALOG (admin)
+############################################################
+
+### Create an organizer
+POST {{host}}/api/organizers
+Content-Type: application/json
+
+{ "name": "Starlight Productions", "email": "hello@starlight.example", "phone": "+1-555-0100" }
+
+### Create a SEATED hall (5 rows x 8 cols; row 1 VIP, rows 2-3 PREMIUM, rows 4-5 REGULAR)
+POST {{host}}/api/halls
+Content-Type: application/json
+
+{
+  "name": "Grand Theatre",
+  "address": "10 Opera Ave",
+  "seated": true,
+  "numRows": 5,
+  "numColumns": 8,
+  "rowTypes": [
+    { "fromRow": 1, "toRow": 1, "seatType": "VIP" },
+    { "fromRow": 2, "toRow": 3, "seatType": "PREMIUM" },
+    { "fromRow": 4, "toRow": 5, "seatType": "REGULAR" }
+  ]
+}
+
+### Create a NON-SEATED (general admission) hall
+POST {{host}}/api/halls
+Content-Type: application/json
+
+{ "name": "Open Arena", "address": "200 Festival Rd", "seated": false, "capacity": 300 }
+
+### Get hall detail (includes generated seats)
+GET {{host}}/api/halls/1
+
+### Create an event (starts in DRAFT). Adjust organizerId / hallId / dates.
+POST {{host}}/api/events
+Content-Type: application/json
+
+{
+  "name": "Symphony Under the Stars",
+  "description": "An evening of orchestral classics.",
+  "category": "Music",
+  "startAt": "2026-08-01T19:00:00Z",
+  "endAt": "2026-08-01T22:00:00Z",
+  "organizerId": 1,
+  "hallId": 1,
+  "maxCapacity": 40
+}
+
+### Set per-seat-type pricing for the seated event
+PUT {{host}}/api/events/1/pricing
+Content-Type: application/json
+
+{
+  "prices": [
+    { "seatType": "VIP", "price": 200.00 },
+    { "seatType": "PREMIUM", "price": 120.00 },
+    { "seatType": "REGULAR", "price": 60.00 }
+  ]
+}
+
+### Publish the event (requires complete pricing)
+PATCH {{host}}/api/events/1/status
+Content-Type: application/json
+
+{ "status": "PUBLISHED" }
+
+############################################################
+# MOBILE (booking flow)
+############################################################
+
+### List available events
+GET {{host}}/api/events/available
+
+### Event detail (hall, pricing, status)
+GET {{host}}/api/events/1
+
+### Live seat map for a seated event (poll this)
+GET {{host}}/api/events/1/seats
+
+### Live availability for a non-seated event (poll this)
+GET {{host}}/api/events/2/availability
+
+### Reserve up to 2 seats (seated). Use seat ids from the seat map.
+POST {{host}}/api/bookings
+Content-Type: application/json
+
+{ "eventId": 1, "customerRef": "user-42", "seatIds": [1, 2] }
+
+### Reserve general-admission tickets (non-seated)
+POST {{host}}/api/bookings
+Content-Type: application/json
+
+{ "eventId": 2, "customerRef": "user-42", "quantity": 2 }
+
+### Get a booking (check status / expiry)
+GET {{host}}/api/bookings/1
+
+### Pay (fake gateway — always succeeds; confirms the hold)
+POST {{host}}/api/bookings/1/payment
+
+### Cancel a pending hold (releases the seats)
+DELETE {{host}}/api/bookings/1
