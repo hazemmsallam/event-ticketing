@@ -19,11 +19,18 @@ services:
 ```
 com.eventticketing
 ├── catalog      Organizer, Hall, Seat, Event, EventPricing  (predefined, admin-managed)
-├── reservation  Booking, BookingSeat, hold/lock logic, expiry sweeper, live availability
+├── reservation  Booking, BookingSeat, Payment, hold/lock logic, expiry + reconciliation
 ├── payment      PaymentGateway abstraction + FakePaymentGateway (always-approves)
+├── web
+│   ├── mobile   endpoints the mobile app calls (browse, live seat map, bookings, payment)
+│   └── admin    endpoints for catalog management (organizers, halls, events, pricing)
 ├── demo         optional startup data seeder
 └── common       BaseEntity, error handling, Clock
 ```
+
+Controllers are grouped by **client** under `web.mobile` and `web.admin`; both call the same
+domain services. (The separate [admin console](https://github.com/hazemmsallam/admin) is a UI in
+its own repo that drives the `web.admin` endpoints.)
 
 - **MySQL** is the single source of truth; **Flyway** owns the schema (Hibernate `ddl-auto: none`).
 - **Redis** caches the availability reads with a short TTL, invalidated on booking events (see [Caching](#caching)).

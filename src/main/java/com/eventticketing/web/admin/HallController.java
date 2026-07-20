@@ -1,4 +1,4 @@
-package com.eventticketing.catalog.web;
+package com.eventticketing.web.admin;
 
 import com.eventticketing.catalog.dto.CreateHallRequest;
 import com.eventticketing.catalog.dto.HallResponse;
@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/** Admin: manage halls and their seat layouts. */
 @RestController
 @RequestMapping("/api/halls")
 public class HallController {

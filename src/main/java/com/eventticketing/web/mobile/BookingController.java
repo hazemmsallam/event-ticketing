@@ -1,4 +1,4 @@
-package com.eventticketing.reservation.web;
+package com.eventticketing.web.mobile;
 
 import com.eventticketing.reservation.dto.BookingResponse;
 import com.eventticketing.reservation.dto.ChangeSeatsRequest;
@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/** Mobile: hold seats/tickets, change seats, pay, and cancel. */
 @RestController
 @RequestMapping("/api/bookings")
 public class BookingController {

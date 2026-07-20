@@ -1,4 +1,4 @@
-package com.eventticketing.catalog.web;
+package com.eventticketing.web.admin;
 
 import com.eventticketing.catalog.dto.CreateEventRequest;
 import com.eventticketing.catalog.dto.EventResponse;
@@ -21,13 +21,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/** Admin: create and manage events, pricing and status. */
 @RestController
 @RequestMapping("/api/events")
-public class EventController {
+public class EventAdminController {
 
     private final EventService eventService;
 
-    public EventController(EventService eventService) {
+    public EventAdminController(EventService eventService) {
         this.eventService = eventService;
     }
 
@@ -40,17 +41,6 @@ public class EventController {
     @GetMapping
     public List<EventSummaryResponse> listAll() {
         return eventService.listAll();
-    }
-
-    /** Mobile listing: events open to booking (PUBLISHED / SOLD_OUT). */
-    @GetMapping("/available")
-    public List<EventSummaryResponse> listAvailable() {
-        return eventService.listAvailable();
-    }
-
-    @GetMapping("/{id}")
-    public EventResponse get(@PathVariable Long id) {
-        return eventService.get(id);
     }
 
     @PutMapping("/{id}")

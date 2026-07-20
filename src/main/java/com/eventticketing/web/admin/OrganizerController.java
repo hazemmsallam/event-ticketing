@@ -1,4 +1,4 @@
-package com.eventticketing.catalog.web;
+package com.eventticketing.web.admin;
 
 import com.eventticketing.catalog.dto.CreateOrganizerRequest;
 import com.eventticketing.catalog.dto.OrganizerResponse;
@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/** Admin: manage organizers. */
 @RestController
 @RequestMapping("/api/organizers")
 public class OrganizerController {
