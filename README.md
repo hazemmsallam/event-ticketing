@@ -210,6 +210,7 @@ available and able to pull `mysql:8.0`.
 | GET  | `/api/events/{id}/availability` | Live capacity (non-seated) |
 | POST | `/api/bookings` | Hold seats / tickets |
 | GET  | `/api/bookings/{id}` | Booking status |
+| PUT  | `/api/bookings/{id}/seats` | Change seats on an unpaid hold (atomic swap) |
 | POST | `/api/bookings/{id}/payment` | Fake payment → confirm |
 | DELETE | `/api/bookings/{id}` | Release a pending hold |
 

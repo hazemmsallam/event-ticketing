@@ -1,6 +1,7 @@
 package com.eventticketing.reservation.web;
 
 import com.eventticketing.reservation.dto.BookingResponse;
+import com.eventticketing.reservation.dto.ChangeSeatsRequest;
 import com.eventticketing.reservation.dto.CreateBookingRequest;
 import com.eventticketing.reservation.dto.PaymentResponse;
 import com.eventticketing.reservation.service.PaymentService;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,6 +39,12 @@ public class BookingController {
     @GetMapping("/{id}")
     public BookingResponse get(@PathVariable Long id) {
         return reservationService.getBooking(id);
+    }
+
+    /** Change the seats on a still-unpaid hold (atomic swap; resets the hold timer). */
+    @PutMapping("/{id}/seats")
+    public BookingResponse changeSeats(@PathVariable Long id, @Valid @RequestBody ChangeSeatsRequest request) {
+        return reservationService.changeSeats(id, request.seatIds());
     }
 
     /** Pay for a hold: charges the gateway (fake) outside the DB transaction and confirms it. */

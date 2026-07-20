@@ -102,6 +102,12 @@ Content-Type: application/json
 ### Get a booking (check status / expiry)
 GET {{host}}/api/bookings/1
 
+### Change the seats on an unpaid hold (atomic swap; resets the hold timer)
+PUT {{host}}/api/bookings/1/seats
+Content-Type: application/json
+
+{ "seatIds": [2, 3] }
+
 ### Pay (fake gateway — always succeeds; confirms the hold)
 POST {{host}}/api/bookings/1/payment
 

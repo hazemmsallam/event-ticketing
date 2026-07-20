@@ -390,6 +390,119 @@ public class ReservationService {
         return BookingResponse.from(booking);
     }
 
+    /**
+     * Swaps the seats held by a pending booking. Seats no longer wanted are released and new ones
+     * are acquired in the same transaction; seats kept in both sets are left untouched. The DB
+     * unique index still guards every acquired seat, so a seat taken in the meantime yields a
+     * conflict and nothing changes. The hold timer is reset.
+     */
+    @Transactional
+    public BookingResponse changeSeats(Long bookingId, List<Long> requestedSeatIds) {
+        Instant now = clock.instant();
+        Booking booking = getBookingEntity(bookingId);
+
+        if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
+            throw new BusinessRuleException(
+                    "Only a pending booking's seats can be changed (status " + booking.getStatus() + ").");
+        }
+        if (booking.isExpired(now)) {
+            throw new BusinessRuleException("The hold has expired. Please start a new booking.");
+        }
+        Event event = booking.getEvent();
+        if (!event.getHall().isSeated()) {
+            throw new BusinessRuleException("This booking is general admission; there are no seats to change.");
+        }
+
+        if (requestedSeatIds == null || requestedSeatIds.isEmpty()) {
+            throw new BusinessRuleException("Provide at least one seat.");
+        }
+        Set<Long> requested = new LinkedHashSet<>(requestedSeatIds);
+        if (requested.size() != requestedSeatIds.size()) {
+            throw new BusinessRuleException("Duplicate seat ids in request.");
+        }
+        int max = properties.maxSeatsPerBooking();
+        if (requested.size() > max) {
+            throw new BusinessRuleException("You can hold at most " + max + " seats per booking.");
+        }
+
+        // Free expired holds so wanted seats become available; flush before any new inserts.
+        releaseExpiredForEvent(event.getId(), now);
+        bookingRepository.flush();
+
+        // Seats currently held by this booking, and the ones being dropped (current - requested).
+        Set<Long> currentSeatIds = new LinkedHashSet<>();
+        for (BookingSeat bs : booking.getBookingSeats()) {
+            if (bs.getStatus() == BookingSeatStatus.HELD) {
+                currentSeatIds.add(bs.getSeat().getId());
+                if (!requested.contains(bs.getSeat().getId())) {
+                    bs.setStatus(BookingSeatStatus.RELEASED);
+                }
+            }
+        }
+
+        Set<Long> toAdd = new LinkedHashSet<>(requested);
+        toAdd.removeAll(currentSeatIds);
+        if (!toAdd.isEmpty()) {
+            List<Seat> seats = seatRepository.findAllById(toAdd);
+            if (seats.size() != toAdd.size()) {
+                throw new ResourceNotFoundException("One or more requested seats do not exist.");
+            }
+            Long hallId = event.getHall().getId();
+            for (Seat seat : seats) {
+                if (!seat.getHall().getId().equals(hallId)) {
+                    throw new BusinessRuleException(
+                            "Seat " + seat.getLabel() + " does not belong to this event's hall.");
+                }
+            }
+            List<BookingSeat> activeElsewhere =
+                    bookingSeatRepository.findForSeats(event.getId(), toAdd, ACTIVE_SEAT_STATUSES).stream()
+                            .filter(bs -> !bs.getBooking().getId().equals(bookingId))
+                            .toList();
+            if (!activeElsewhere.isEmpty()) {
+                String taken = activeElsewhere.stream()
+                        .map(bs -> bs.getSeat().getLabel())
+                        .distinct()
+                        .collect(Collectors.joining(", "));
+                throw new ConflictException("These seats are already reserved or booked: " + taken + ".");
+            }
+            Map<SeatType, BigDecimal> priceByType = pricingByType(event);
+            for (Seat seat : seats) {
+                BigDecimal price = priceByType.get(seat.getSeatType());
+                if (price == null) {
+                    throw new BusinessRuleException("No price configured for seat type " + seat.getSeatType() + ".");
+                }
+                BookingSeat bookingSeat = new BookingSeat();
+                bookingSeat.setEvent(event);
+                bookingSeat.setSeat(seat);
+                bookingSeat.setSeatType(seat.getSeatType());
+                bookingSeat.setPrice(price);
+                bookingSeat.setStatus(BookingSeatStatus.HELD);
+                booking.addBookingSeat(bookingSeat);
+            }
+        }
+
+        BigDecimal total = BigDecimal.ZERO;
+        int quantity = 0;
+        for (BookingSeat bs : booking.getBookingSeats()) {
+            if (bs.getStatus() == BookingSeatStatus.HELD) {
+                total = total.add(bs.getPrice());
+                quantity++;
+            }
+        }
+        booking.setTotalAmount(total);
+        booking.setQuantity(quantity);
+        booking.setExpiresAt(now.plus(properties.holdDuration()));
+
+        try {
+            bookingRepository.saveAndFlush(booking);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException(
+                    "One or more selected seats were just taken. Please choose different seats.");
+        }
+        evictAfterCommit(event.getId());
+        return BookingResponse.from(booking);
+    }
+
     // ------------------------------------------------------------------ expiry
 
     /** Releases every expired pending hold system-wide. Invoked by the scheduled sweeper. */

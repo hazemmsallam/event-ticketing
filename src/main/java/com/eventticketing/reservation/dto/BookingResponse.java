@@ -1,6 +1,7 @@
 package com.eventticketing.reservation.dto;
 
 import com.eventticketing.reservation.domain.Booking;
+import com.eventticketing.reservation.domain.BookingSeatStatus;
 import com.eventticketing.reservation.domain.BookingStatus;
 
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ public record BookingResponse(
 ) {
     public static BookingResponse from(Booking b) {
         List<BookingSeatResponse> seats = b.getBookingSeats().stream()
+                .filter(bs -> bs.getStatus() != BookingSeatStatus.RELEASED)
                 .map(BookingSeatResponse::from)
                 .toList();
         return new BookingResponse(
