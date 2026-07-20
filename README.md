@@ -112,6 +112,15 @@ See `api-examples.http` for ready-to-run requests.
 Database connection is configurable via env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`,
 `DB_USERNAME`, `DB_PASSWORD` (defaults target the bundled docker-compose MySQL).
 
+## API docs (Swagger)
+
+Interactive OpenAPI docs are served by SpringDoc once the app is running:
+
+- Swagger UI: `http://localhost:8090/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8090/v3/api-docs`
+
+(Use whatever host port you mapped; default is 8090.)
+
 ## Configuration
 
 | Property                             | Default | Meaning |
