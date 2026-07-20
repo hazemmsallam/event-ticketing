@@ -15,5 +15,21 @@ services:
       timeout: 5s
       retries: 10
 
+  app:
+    build: .
+    container_name: event-ticketing-app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: event_ticketing
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      SEED_DEMO_DATA: "true"
+    ports:
+      - "8080:8080"
+
 volumes:
   mysql-data:

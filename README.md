@@ -82,19 +82,32 @@ seat and asserts exactly one wins.
 
 ## Running it
 
-Prerequisites: JDK 21, Maven, Docker (for MySQL).
+### Option A — everything in Docker (only Docker required)
+
+No host JDK or Maven needed; the image builds the app itself.
 
 ```bash
-# 1. Start MySQL
-docker compose up -d
+docker compose up --build
+```
+
+This starts MySQL and the app together (with demo data). The app is on
+`http://localhost:8080`. Stop with `Ctrl+C`, or run detached with `-d`.
+
+### Option B — run the app on the host
+
+Prerequisites: JDK 21, Maven, Docker (for MySQL only).
+
+```bash
+# 1. Start just MySQL
+docker compose up -d mysql
 
 # 2. Run the app (optionally seed demo data)
 SEED_DEMO_DATA=true mvn spring-boot:run
 ```
 
-The app starts on `http://localhost:8080`. Flyway creates the schema on first boot. With
-`SEED_DEMO_DATA=true` you get an organizer, a seated hall + a general-admission hall, and two
-published events to play with. See `api-examples.http` for ready-to-run requests.
+Either way, Flyway creates the schema on first boot. With `SEED_DEMO_DATA=true` you get an
+organizer, a seated hall + a general-admission hall, and two published events to play with.
+See `api-examples.http` for ready-to-run requests.
 
 Database connection is configurable via env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`,
 `DB_USERNAME`, `DB_PASSWORD` (defaults target the bundled docker-compose MySQL).
