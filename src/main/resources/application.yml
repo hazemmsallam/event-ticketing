@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: event-ticketing
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:event_ticketing}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&createDatabaseIfNotExist=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      # Flyway is the single source of truth for the schema; Hibernate never alters it.
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+app:
+  reservation:
+    # ISO-8601 duration. How long a seat stays HELD before auto-release if unpaid.
+    hold-duration: PT10M
+    # Maximum number of seats a single booking may hold.
+    max-seats-per-booking: 2
+    # How often the sweeper job releases expired holds.
+    sweep-interval: PT30S
+
+server:
+  port: ${SERVER_PORT:8080}
+
+logging:
+  level:
+    com.eventticketing: debug
