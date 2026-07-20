@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * with the database unique index rejecting the rest.
  */
 @SpringBootTest
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class ConcurrentBookingIntegrationTest {
 
     @Container
