@@ -18,6 +18,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Fail fast if Redis is momentarily unreachable; cache errors degrade to a DB read.
+      timeout: 500ms
 
 app:
   # Set to true to load a small predefined catalog on startup (see DemoDataSeeder).
@@ -29,6 +35,10 @@ app:
     max-seats-per-booking: 2
     # How often the sweeper job releases expired holds.
     sweep-interval: PT30S
+    # How long availability/seat-map reads are cached in Redis. Short by design: a stale
+    # entry can never cause a double-booking (the DB unique index still guards writes), it
+    # only briefly delays what the UI shows.
+    cache-ttl: PT2S
 
 server:
   port: ${SERVER_PORT:8080}

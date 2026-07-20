@@ -15,11 +15,24 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: event-ticketing-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   app:
     build: .
     container_name: event-ticketing-app
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       DB_HOST: mysql
@@ -27,6 +40,8 @@ services:
       DB_NAME: event_ticketing
       DB_USERNAME: root
       DB_PASSWORD: root
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       SEED_DEMO_DATA: "true"
     ports:
       - "${APP_PORT:-8090}:8080"

@@ -13,6 +13,7 @@ import com.eventticketing.common.exception.ConflictException;
 import com.eventticketing.common.exception.ResourceNotFoundException;
 import com.eventticketing.payment.PaymentGateway;
 import com.eventticketing.payment.PaymentResult;
+import com.eventticketing.reservation.config.CacheNames;
 import com.eventticketing.reservation.config.ReservationProperties;
 import com.eventticketing.reservation.domain.Booking;
 import com.eventticketing.reservation.domain.BookingSeat;
@@ -27,9 +28,16 @@ import com.eventticketing.reservation.dto.PaymentResponse;
 import com.eventticketing.reservation.dto.SeatAvailabilityResponse;
 import com.eventticketing.reservation.repository.BookingRepository;
 import com.eventticketing.reservation.repository.BookingSeatRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -45,6 +53,8 @@ import java.util.stream.Collectors;
 @Service
 public class ReservationService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReservationService.class);
+
     private static final List<BookingSeatStatus> ACTIVE_SEAT_STATUSES =
             List.of(BookingSeatStatus.HELD, BookingSeatStatus.BOOKED);
 
@@ -55,6 +65,7 @@ public class ReservationService {
     private final PaymentGateway paymentGateway;
     private final ReservationProperties properties;
     private final Clock clock;
+    private final CacheManager cacheManager;
 
     public ReservationService(BookingRepository bookingRepository,
                               BookingSeatRepository bookingSeatRepository,
@@ -62,7 +73,8 @@ public class ReservationService {
                               SeatRepository seatRepository,
                               PaymentGateway paymentGateway,
                               ReservationProperties properties,
-                              Clock clock) {
+                              Clock clock,
+                              CacheManager cacheManager) {
         this.bookingRepository = bookingRepository;
         this.bookingSeatRepository = bookingSeatRepository;
         this.eventRepository = eventRepository;
@@ -70,6 +82,7 @@ public class ReservationService {
         this.paymentGateway = paymentGateway;
         this.properties = properties;
         this.clock = clock;
+        this.cacheManager = cacheManager;
     }
 
     // ------------------------------------------------------------------ booking
@@ -162,6 +175,7 @@ public class ReservationService {
             throw new ConflictException(
                     "One or more selected seats were just taken. Please choose different seats.");
         }
+        evictAfterCommit(event.getId());
         return BookingResponse.from(booking);
     }
 
@@ -197,6 +211,7 @@ public class ReservationService {
         Booking booking = newBooking(locked, request.customerRef(), quantity, now);
         booking.setTotalAmount(price.multiply(BigDecimal.valueOf(quantity)));
         bookingRepository.save(booking);
+        evictAfterCommit(locked.getId());
         return BookingResponse.from(booking);
     }
 
@@ -240,6 +255,7 @@ public class ReservationService {
             }
         }
         maybeMarkSoldOut(booking.getEvent());
+        evictAfterCommit(booking.getEvent().getId());
 
         return new PaymentResponse(booking.getId(), booking.getStatus(), booking.getPaymentRef(),
                 true, "Payment successful. Booking confirmed.");
@@ -254,6 +270,7 @@ public class ReservationService {
         }
         booking.setStatus(BookingStatus.CANCELLED);
         releaseHeldSeats(booking);
+        evictAfterCommit(booking.getEvent().getId());
         return BookingResponse.from(booking);
     }
 
@@ -295,6 +312,7 @@ public class ReservationService {
         return BookingResponse.from(getBookingEntity(bookingId));
     }
 
+    @Cacheable(cacheNames = CacheNames.EVENT_SEAT_MAP, key = "#eventId")
     @Transactional(readOnly = true)
     public EventSeatMapResponse getSeatMap(Long eventId) {
         Instant now = clock.instant();
@@ -347,6 +365,7 @@ public class ReservationService {
         return statusBySeat;
     }
 
+    @Cacheable(cacheNames = CacheNames.EVENT_AVAILABILITY, key = "#eventId")
     @Transactional(readOnly = true)
     public EventAvailabilityResponse getAvailability(Long eventId) {
         Instant now = clock.instant();
@@ -398,6 +417,40 @@ public class ReservationService {
                 : bookingRepository.sumConfirmedQuantity(event.getId());
         if (confirmedUnits >= event.getMaxCapacity()) {
             event.setStatus(EventStatus.SOLD_OUT);
+        }
+    }
+
+    /**
+     * Evicts the cached availability for an event, deferred until the surrounding transaction
+     * commits so a concurrent read can't repopulate the cache with pre-commit state.
+     */
+    private void evictAfterCommit(Long eventId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    evictAvailability(eventId);
+                }
+            });
+        } else {
+            evictAvailability(eventId);
+        }
+    }
+
+    private void evictAvailability(Long eventId) {
+        evict(CacheNames.EVENT_SEAT_MAP, eventId);
+        evict(CacheNames.EVENT_AVAILABILITY, eventId);
+    }
+
+    private void evict(String cacheName, Long eventId) {
+        try {
+            Cache cache = cacheManager.getCache(cacheName);
+            if (cache != null) {
+                cache.evictIfPresent(eventId);
+            }
+        } catch (RuntimeException ex) {
+            // Best-effort: a Redis outage must never break a booking. The short TTL heals staleness.
+            log.warn("Cache eviction failed for {} event {}: {}", cacheName, eventId, ex.getMessage());
         }
     }
 }
