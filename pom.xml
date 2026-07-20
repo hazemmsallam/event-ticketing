@@ -20,6 +20,8 @@
     <properties>
         <java.version>21</java.version>
         <testcontainers.version>1.20.4</testcontainers.version>
+        <!-- Override the Spring Boot-managed Lombok so it supports newer JDKs (e.g. JDK 25). -->
+        <lombok.version>1.18.40</lombok.version>
     </properties>
 
     <dependencies>
