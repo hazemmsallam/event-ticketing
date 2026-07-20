@@ -235,9 +235,9 @@ public class ReservationService {
      * transaction. Idempotent — a repeated call reuses the existing payment row and its key.
      */
     @Transactional
-    public PaymentContext beginPayment(Long bookingId) {
+    public PaymentContext beginPayment(Long bookingId, String customerRef) {
         Instant now = clock.instant();
-        Booking booking = getBookingEntity(bookingId);
+        Booking booking = getOwnedBooking(bookingId, customerRef);
 
         if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
             throw new BusinessRuleException(
@@ -378,8 +378,8 @@ public class ReservationService {
     // ------------------------------------------------------------------ cancel
 
     @Transactional
-    public BookingResponse cancelBooking(Long bookingId) {
-        Booking booking = getBookingEntity(bookingId);
+    public BookingResponse cancelBooking(Long bookingId, String customerRef) {
+        Booking booking = getOwnedBooking(bookingId, customerRef);
         if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
             throw new BusinessRuleException(
                     "Only a pending booking can be cancelled (status " + booking.getStatus() + ").");
@@ -397,9 +397,9 @@ public class ReservationService {
      * conflict and nothing changes. The hold timer is reset.
      */
     @Transactional
-    public BookingResponse changeSeats(Long bookingId, List<Long> requestedSeatIds) {
+    public BookingResponse changeSeats(Long bookingId, String customerRef, List<Long> requestedSeatIds) {
         Instant now = clock.instant();
-        Booking booking = getBookingEntity(bookingId);
+        Booking booking = getOwnedBooking(bookingId, customerRef);
 
         if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
             throw new BusinessRuleException(
@@ -537,8 +537,8 @@ public class ReservationService {
     // ------------------------------------------------------------------ reads
 
     @Transactional(readOnly = true)
-    public BookingResponse getBooking(Long bookingId) {
-        return BookingResponse.from(getBookingEntity(bookingId));
+    public BookingResponse getBooking(Long bookingId, String customerRef) {
+        return BookingResponse.from(getOwnedBooking(bookingId, customerRef));
     }
 
     @Cacheable(cacheNames = CacheNames.EVENT_SEAT_MAP, key = "#eventId")
@@ -616,6 +616,16 @@ public class ReservationService {
 
     private Booking getBookingEntity(Long bookingId) {
         return bookingRepository.findById(bookingId)
+                .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
+    }
+
+    /**
+     * Loads a booking only if it belongs to {@code customerRef}. A booking owned by someone else
+     * is reported as not found so ids cannot be probed for existence.
+     */
+    private Booking getOwnedBooking(Long bookingId, String customerRef) {
+        return bookingRepository.findById(bookingId)
+                .filter(booking -> booking.getCustomerRef().equals(customerRef))
                 .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
     }
 

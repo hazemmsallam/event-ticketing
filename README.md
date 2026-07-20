@@ -223,9 +223,14 @@ available and able to pull `mysql:8.0`.
 
 ## Notes & current scope
 
-- **Authentication is intentionally deferred.** Bookings carry a `customerRef` string as a
-  placeholder for the authenticated user; wire in Spring Security / JWT later without touching
-  the reservation core.
+- **Booking ownership is enforced.** Every booking-scoped call (get / change seats / pay /
+  cancel) must send an `X-Customer-Ref` header equal to the `customerRef` that created the
+  booking; a mismatch returns `404` so booking ids can't be probed. This is object-level
+  authorization — you can't act on someone else's booking.
+- **Authentication itself is still deferred.** Today `customerRef` is asserted by the client
+  (via the header), so use an opaque, unguessable value per user. The proper completion is JWT:
+  the identity moves from a client header to a verified token, and `getOwnedBooking(...)` reads
+  the subject from the security context instead — the ownership check stays exactly the same.
 - Payment is a `FakePaymentGateway` that always approves, but the surrounding flow is
   production-shaped: charge outside the transaction, a durable `Payment` record, and a
   reconciliation job that confirms-or-refunds in-doubt charges (see [Payments &
