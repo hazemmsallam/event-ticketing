@@ -28,6 +28,20 @@ public class OrganizerService {
         return OrganizerResponse.from(organizerRepository.save(organizer));
     }
 
+    @Transactional
+    public OrganizerResponse update(Long id, CreateOrganizerRequest request) {
+        Organizer organizer = getEntity(id);
+        organizer.setName(request.name());
+        organizer.setEmail(request.email());
+        organizer.setPhone(request.phone());
+        return OrganizerResponse.from(organizer);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        organizerRepository.delete(getEntity(id));
+    }
+
     @Transactional(readOnly = true)
     public List<OrganizerResponse> list() {
         return organizerRepository.findAll().stream().map(OrganizerResponse::from).toList();

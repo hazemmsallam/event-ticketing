@@ -9,6 +9,7 @@ import com.eventticketing.catalog.dto.HallResponse;
 import com.eventticketing.catalog.dto.HallSummaryResponse;
 import com.eventticketing.catalog.dto.RowTypeRange;
 import com.eventticketing.catalog.dto.SeatResponse;
+import com.eventticketing.catalog.dto.UpdateHallRequest;
 import com.eventticketing.catalog.repository.HallRepository;
 import com.eventticketing.common.exception.BusinessRuleException;
 import com.eventticketing.common.exception.ResourceNotFoundException;
@@ -102,6 +103,19 @@ public class HallService {
             }
         }
         return typeByRow;
+    }
+
+    @Transactional
+    public HallResponse update(Long id, UpdateHallRequest request) {
+        Hall hall = getEntity(id);
+        hall.setName(request.name());
+        hall.setAddress(request.address());
+        return toResponse(hall);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        hallRepository.delete(getEntity(id));
     }
 
     @Transactional(readOnly = true)

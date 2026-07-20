@@ -1,6 +1,7 @@
 package com.eventticketing.common.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -25,6 +26,13 @@ public class GlobalExceptionHandler {
                 .map(this::toViolation)
                 .toList();
         return build(HttpStatus.BAD_REQUEST, "Validation failed", request, violations);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT,
+                "The operation conflicts with existing data (the resource may still be in use).",
+                request, List.of());
     }
 
     @ExceptionHandler(Exception.class)
