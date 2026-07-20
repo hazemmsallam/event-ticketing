@@ -11,7 +11,6 @@ import com.eventticketing.catalog.repository.SeatRepository;
 import com.eventticketing.common.exception.BusinessRuleException;
 import com.eventticketing.common.exception.ConflictException;
 import com.eventticketing.common.exception.ResourceNotFoundException;
-import com.eventticketing.payment.PaymentGateway;
 import com.eventticketing.payment.PaymentResult;
 import com.eventticketing.reservation.config.CacheNames;
 import com.eventticketing.reservation.config.ReservationProperties;
@@ -19,6 +18,8 @@ import com.eventticketing.reservation.domain.Booking;
 import com.eventticketing.reservation.domain.BookingSeat;
 import com.eventticketing.reservation.domain.BookingSeatStatus;
 import com.eventticketing.reservation.domain.BookingStatus;
+import com.eventticketing.reservation.domain.Payment;
+import com.eventticketing.reservation.domain.PaymentStatus;
 import com.eventticketing.reservation.domain.SeatAvailabilityStatus;
 import com.eventticketing.reservation.dto.BookingResponse;
 import com.eventticketing.reservation.dto.CreateBookingRequest;
@@ -28,6 +29,7 @@ import com.eventticketing.reservation.dto.PaymentResponse;
 import com.eventticketing.reservation.dto.SeatAvailabilityResponse;
 import com.eventticketing.reservation.repository.BookingRepository;
 import com.eventticketing.reservation.repository.BookingSeatRepository;
+import com.eventticketing.reservation.repository.PaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.Cache;
@@ -60,26 +62,26 @@ public class ReservationService {
 
     private final BookingRepository bookingRepository;
     private final BookingSeatRepository bookingSeatRepository;
+    private final PaymentRepository paymentRepository;
     private final EventRepository eventRepository;
     private final SeatRepository seatRepository;
-    private final PaymentGateway paymentGateway;
     private final ReservationProperties properties;
     private final Clock clock;
     private final CacheManager cacheManager;
 
     public ReservationService(BookingRepository bookingRepository,
                               BookingSeatRepository bookingSeatRepository,
+                              PaymentRepository paymentRepository,
                               EventRepository eventRepository,
                               SeatRepository seatRepository,
-                              PaymentGateway paymentGateway,
                               ReservationProperties properties,
                               Clock clock,
                               CacheManager cacheManager) {
         this.bookingRepository = bookingRepository;
         this.bookingSeatRepository = bookingSeatRepository;
+        this.paymentRepository = paymentRepository;
         this.eventRepository = eventRepository;
         this.seatRepository = seatRepository;
-        this.paymentGateway = paymentGateway;
         this.properties = properties;
         this.clock = clock;
         this.cacheManager = cacheManager;
@@ -225,10 +227,15 @@ public class ReservationService {
         return booking;
     }
 
-    // ------------------------------------------------------------------ payment / cancel
+    // ------------------------------------------------------------------ payment
 
+    /**
+     * First step of payment: validates the hold and records a durable {@link Payment} in the
+     * INITIATED state, then returns a snapshot so the gateway can be charged <em>outside</em> any
+     * transaction. Idempotent — a repeated call reuses the existing payment row and its key.
+     */
     @Transactional
-    public PaymentResponse pay(Long bookingId) {
+    public PaymentContext beginPayment(Long bookingId) {
         Instant now = clock.instant();
         Booking booking = getBookingEntity(bookingId);
 
@@ -240,15 +247,67 @@ public class ReservationService {
             throw new BusinessRuleException("The hold has expired. Please start a new booking.");
         }
 
-        PaymentResult result = paymentGateway.charge(
-                booking.getCustomerRef(), booking.getTotalAmount(), "booking-" + booking.getId());
-        if (!result.success()) {
-            throw new BusinessRuleException("Payment failed: " + result.message());
+        Payment payment = paymentRepository.findByBookingId(bookingId).orElseGet(() -> {
+            Payment created = new Payment();
+            created.setBooking(booking);
+            created.setIdempotencyKey("booking-" + bookingId);
+            created.setCustomerRef(booking.getCustomerRef());
+            created.setAmount(booking.getTotalAmount());
+            return created;
+        });
+        if (payment.getStatus() == PaymentStatus.SUCCEEDED) {
+            throw new BusinessRuleException("This booking has already been paid.");
+        }
+        payment.setStatus(PaymentStatus.INITIATED);
+        payment.setFailureReason(null);
+        Payment saved = paymentRepository.save(payment);
+
+        return new PaymentContext(saved.getId(), bookingId, booking.getCustomerRef(),
+                booking.getTotalAmount(), saved.getIdempotencyKey());
+    }
+
+    /**
+     * Final step of payment: records the gateway outcome and, on success, confirms the booking —
+     * all in one transaction. If the charge succeeded but the hold no longer exists, the payment
+     * is left INITIATED and an error is raised so reconciliation issues a refund.
+     */
+    @Transactional
+    public PaymentResponse applyPaymentResult(Long paymentId, PaymentResult result) {
+        Instant now = clock.instant();
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> ResourceNotFoundException.of("Payment", paymentId));
+        Booking booking = payment.getBooking();
+
+        // Idempotent: if already finalized, report the current state.
+        if (payment.getStatus() == PaymentStatus.SUCCEEDED) {
+            return paymentResponse(booking, true, "Payment already confirmed.");
+        }
+        if (payment.getStatus() == PaymentStatus.FAILED || payment.getStatus() == PaymentStatus.REFUNDED) {
+            return paymentResponse(booking, false, "Payment was not successful.");
         }
 
+        if (!result.success()) {
+            payment.setStatus(PaymentStatus.FAILED);
+            payment.setFailureReason(result.message());
+            return paymentResponse(booking, false, "Payment failed: " + result.message());
+        }
+
+        if (booking.getStatus() != BookingStatus.PENDING_PAYMENT || booking.isExpired(now)) {
+            // Charged, but the hold is gone. Leave INITIATED for the reconciler to refund.
+            throw new BusinessRuleException(
+                    "The hold expired during payment; the charge will be refunded shortly.");
+        }
+
+        confirmPaidBooking(booking, payment, result.reference(), now);
+        return paymentResponse(booking, true, "Payment successful. Booking confirmed.");
+    }
+
+    private void confirmPaidBooking(Booking booking, Payment payment, String reference, Instant now) {
+        payment.setStatus(PaymentStatus.SUCCEEDED);
+        payment.setReference(reference);
         booking.setStatus(BookingStatus.CONFIRMED);
         booking.setConfirmedAt(now);
-        booking.setPaymentRef(result.reference());
+        booking.setPaymentRef(reference);
         for (BookingSeat seat : booking.getBookingSeats()) {
             if (seat.getStatus() == BookingSeatStatus.HELD) {
                 seat.setStatus(BookingSeatStatus.BOOKED);
@@ -256,10 +315,67 @@ public class ReservationService {
         }
         maybeMarkSoldOut(booking.getEvent());
         evictAfterCommit(booking.getEvent().getId());
-
-        return new PaymentResponse(booking.getId(), booking.getStatus(), booking.getPaymentRef(),
-                true, "Payment successful. Booking confirmed.");
     }
+
+    private PaymentResponse paymentResponse(Booking booking, boolean success, String message) {
+        return new PaymentResponse(booking.getId(), booking.getStatus(), booking.getPaymentRef(), success, message);
+    }
+
+    // ------------------------------------------------------------------ reconciliation
+
+    /** In-doubt payments (INITIATED and untouched for a while) that need reconciling. */
+    @Transactional(readOnly = true)
+    public List<PaymentSummary> findPaymentsToReconcile() {
+        Instant threshold = clock.instant().minus(properties.reconcileAfter());
+        return paymentRepository.findByStatusAndUpdatedAtBefore(PaymentStatus.INITIATED, threshold).stream()
+                .map(p -> new PaymentSummary(p.getId(), p.getIdempotencyKey()))
+                .toList();
+    }
+
+    /**
+     * Resolves one in-doubt payment given what the gateway reports. Confirms the booking if the
+     * charge succeeded and the hold still stands; signals a refund if the charge succeeded but the
+     * seats are gone; marks the payment FAILED if no charge ever happened.
+     */
+    @Transactional
+    public ReconcileOutcome reconcile(Long paymentId, java.util.Optional<PaymentResult> gatewayResult) {
+        Instant now = clock.instant();
+        Payment payment = paymentRepository.findById(paymentId).orElse(null);
+        if (payment == null || payment.getStatus() != PaymentStatus.INITIATED) {
+            return ReconcileOutcome.NONE;
+        }
+
+        if (gatewayResult.isEmpty() || !gatewayResult.get().success()) {
+            payment.setStatus(PaymentStatus.FAILED);
+            payment.setFailureReason("No successful charge found during reconciliation.");
+            return ReconcileOutcome.NONE;
+        }
+
+        String reference = gatewayResult.get().reference();
+        Booking booking = payment.getBooking();
+        if (booking.getStatus() == BookingStatus.CONFIRMED) {
+            payment.setStatus(PaymentStatus.SUCCEEDED);
+            payment.setReference(reference);
+            return ReconcileOutcome.NONE;
+        }
+        if (booking.getStatus() == BookingStatus.PENDING_PAYMENT && !booking.isExpired(now)) {
+            confirmPaidBooking(booking, payment, reference, now);
+            return ReconcileOutcome.NONE;
+        }
+        // Charged, but the hold is gone (expired/cancelled) — the job must refund.
+        return ReconcileOutcome.refund(reference);
+    }
+
+    @Transactional
+    public void markRefunded(Long paymentId, String reference) {
+        paymentRepository.findById(paymentId).ifPresent(payment -> {
+            payment.setStatus(PaymentStatus.REFUNDED);
+            payment.setReference(reference);
+            payment.setFailureReason("Refunded: the hold was no longer valid when payment settled.");
+        });
+    }
+
+    // ------------------------------------------------------------------ cancel
 
     @Transactional
     public BookingResponse cancelBooking(Long bookingId) {

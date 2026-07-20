@@ -132,6 +132,28 @@ Two deliberate properties:
   skipped, and every request falls back to the database — the app keeps working, just without the
   read-offload.
 
+## Payments & reconciliation
+
+You can't wrap "charge a card" and "commit to the database" in one atomic transaction — they're
+two systems (the dual-write problem). So payment is deliberately staged, and every charge is
+recorded durably:
+
+1. **`beginPayment`** (short txn) — validate the hold, persist a `Payment` row as `INITIATED`.
+2. **`charge`** (no txn open) — call the gateway with a stable idempotency key (`booking-{id}`),
+   so a retry never double-charges.
+3. **`applyPaymentResult`** (short txn) — record the outcome and confirm the booking.
+
+If step 3 never runs (crash, DB failure, lost response), the `Payment` stays `INITIATED` and a
+**reconciliation job** picks it up: it asks the gateway what actually happened and then either
+**confirms** the booking (charge succeeded, hold still valid) or **refunds** the charge (a
+compensating action, when the seats are gone). The idempotency key is what makes this safe —
+the charge can be looked up and re-applied without ever double-charging. Payment states:
+`INITIATED → SUCCEEDED | FAILED | REFUNDED`.
+
+The gateway is still a `FakePaymentGateway` (always approves, with an in-memory ledger so
+`lookup`/`refund` behave like a real provider). Swap in a real `PaymentGateway` — ideally
+webhook-driven for the final confirmation — without touching the reservation core.
+
 ## API docs (Swagger)
 
 Interactive OpenAPI docs are served by SpringDoc once the app is running:
@@ -196,7 +218,9 @@ available and able to pull `mysql:8.0`.
 - **Authentication is intentionally deferred.** Bookings carry a `customerRef` string as a
   placeholder for the authenticated user; wire in Spring Security / JWT later without touching
   the reservation core.
-- Payment is a `FakePaymentGateway` that always approves — swap in a real `PaymentGateway`
-  implementation for production.
+- Payment is a `FakePaymentGateway` that always approves, but the surrounding flow is
+  production-shaped: charge outside the transaction, a durable `Payment` record, and a
+  reconciliation job that confirms-or-refunds in-doubt charges (see [Payments &
+  reconciliation](#payments--reconciliation)).
 - Seated events are bounded by their seats; per-event `maxCapacity` below the hall size is not
   strictly enforced for seated halls (seat availability is the practical cap).

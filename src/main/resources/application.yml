@@ -39,6 +39,9 @@ app:
     # entry can never cause a double-booking (the DB unique index still guards writes), it
     # only briefly delays what the UI shows.
     cache-ttl: PT2S
+    # How long a payment may sit in the in-doubt INITIATED state before the reconciliation
+    # job resolves it (confirm the booking or refund the charge).
+    reconcile-after: PT1M
 
 server:
   port: ${SERVER_PORT:8089}

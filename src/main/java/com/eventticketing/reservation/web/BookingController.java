@@ -3,6 +3,7 @@ package com.eventticketing.reservation.web;
 import com.eventticketing.reservation.dto.BookingResponse;
 import com.eventticketing.reservation.dto.CreateBookingRequest;
 import com.eventticketing.reservation.dto.PaymentResponse;
+import com.eventticketing.reservation.service.PaymentService;
 import com.eventticketing.reservation.service.ReservationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -20,9 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class BookingController {
 
     private final ReservationService reservationService;
+    private final PaymentService paymentService;
 
-    public BookingController(ReservationService reservationService) {
+    public BookingController(ReservationService reservationService, PaymentService paymentService) {
         this.reservationService = reservationService;
+        this.paymentService = paymentService;
     }
 
     /** Reserve seats (seated) or tickets (general admission); returns the hold and its expiry. */
@@ -36,10 +39,10 @@ public class BookingController {
         return reservationService.getBooking(id);
     }
 
-    /** Fake payment that always succeeds, confirming the hold into a booking. */
+    /** Pay for a hold: charges the gateway (fake) outside the DB transaction and confirms it. */
     @PostMapping("/{id}/payment")
     public PaymentResponse pay(@PathVariable Long id) {
-        return reservationService.pay(id);
+        return paymentService.pay(id);
     }
 
     /** Release a pending hold before payment. */
