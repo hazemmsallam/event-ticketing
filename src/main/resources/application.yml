@@ -41,7 +41,7 @@ app:
     cache-ttl: PT2S
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:8089}
 
 logging:
   level:
