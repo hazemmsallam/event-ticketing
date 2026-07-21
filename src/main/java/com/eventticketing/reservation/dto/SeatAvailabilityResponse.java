@@ -16,6 +16,12 @@ public record SeatAvailabilityResponse(
         int rowIndex,
         int seatNumber,
         SeatType seatType,
+        Integer layoutX,
+        Integer layoutY,
+        Integer rotationDegrees,
+        Integer layoutWidth,
+        Integer layoutHeight,
+        String sectionName,
         BigDecimal price,
         SeatAvailabilityStatus status
 ) {

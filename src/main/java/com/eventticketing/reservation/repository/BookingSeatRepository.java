@@ -37,4 +37,12 @@ public interface BookingSeatRepository extends JpaRepository<BookingSeat, Long> 
                                          @Param("statuses") Collection<BookingSeatStatus> statuses);
 
     long countByEventIdAndStatus(Long eventId, BookingSeatStatus status);
+
+    /**
+     * Of the given seats, which are referenced by any booking (regardless of status). Used to
+     * block deletion of seats that a booking row points at — the {@code seat_id} FK is NOT NULL,
+     * so removing such a seat would violate referential integrity.
+     */
+    @Query("select distinct bs.seat.id from BookingSeat bs where bs.seat.id in :seatIds")
+    List<Long> findBookedSeatIds(@Param("seatIds") Collection<Long> seatIds);
 }

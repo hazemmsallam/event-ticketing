@@ -47,6 +47,12 @@ public class Hall extends BaseEntity {
     @Column(name = "numbering_scheme", length = 40)
     private SeatNumberingScheme numberingScheme;
 
+    @Column(name = "layout_width")
+    private Integer layoutWidth;
+
+    @Column(name = "layout_height")
+    private Integer layoutHeight;
+
     @OneToMany(mappedBy = "hall", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("rowIndex ASC, seatNumber ASC")
     private List<Seat> seats = new ArrayList<>();

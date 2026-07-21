@@ -58,7 +58,8 @@ new bookings; publishing requires complete pricing.
 3. Seated → `GET /api/events/{id}/seats` for the live map; non-seated → `GET /api/events/{id}/availability`.
 4. `POST /api/bookings` — reserve ≤ 2 seats (or N GA tickets). Returns the hold and its `expiresAt`.
 5. `POST /api/bookings/{id}/payment` — fake payment; on success the hold becomes a confirmed booking.
-6. Unpaid holds auto-release after the configured window (default 10 min).
+6. `GET /api/bookings` with `X-Customer-Ref` - show that user's booking history, newest first.
+7. Unpaid holds auto-release after the configured window (default 10 min).
 
 ## How double-booking is prevented (the important part)
 
@@ -216,6 +217,7 @@ available and able to pull `mysql:8.0`.
 | GET  | `/api/events/{id}/seats` | Live seat map (seated) |
 | GET  | `/api/events/{id}/availability` | Live capacity (non-seated) |
 | POST | `/api/bookings` | Hold seats / tickets |
+| GET  | `/api/bookings` | Customer booking history |
 | GET  | `/api/bookings/{id}` | Booking status |
 | PUT  | `/api/bookings/{id}/seats` | Change seats on an unpaid hold (atomic swap) |
 | POST | `/api/bookings/{id}/payment` | Fake payment → confirm |
@@ -223,10 +225,10 @@ available and able to pull `mysql:8.0`.
 
 ## Notes & current scope
 
-- **Booking ownership is enforced.** Every booking-scoped call (get / change seats / pay /
-  cancel) must send an `X-Customer-Ref` header equal to the `customerRef` that created the
-  booking; a mismatch returns `404` so booking ids can't be probed. This is object-level
-  authorization — you can't act on someone else's booking.
+- **Booking ownership is enforced.** Every customer booking call (list / get / change seats / pay /
+  cancel) must send an `X-Customer-Ref` header. The history endpoint uses it to scope the list;
+  booking-id calls require it to match the booking owner and return `404` on mismatch so ids can't
+  be probed. This is object-level authorization — you can't act on someone else's booking.
 - **Authentication itself is still deferred.** Today `customerRef` is asserted by the client
   (via the header), so use an opaque, unguessable value per user. The proper completion is JWT:
   the identity moves from a client header to a verified token, and `getOwnedBooking(...)` reads

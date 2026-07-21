@@ -541,6 +541,13 @@ public class ReservationService {
         return BookingResponse.from(getOwnedBooking(bookingId, customerRef));
     }
 
+    @Transactional(readOnly = true)
+    public List<BookingResponse> listBookings(String customerRef) {
+        return bookingRepository.findByCustomerRefOrderByCreatedAtDescIdDesc(customerRef).stream()
+                .map(BookingResponse::from)
+                .toList();
+    }
+
     @Cacheable(cacheNames = CacheNames.EVENT_SEAT_MAP, key = "#eventId")
     @Transactional(readOnly = true)
     public EventSeatMapResponse getSeatMap(Long eventId) {
@@ -572,11 +579,13 @@ public class ReservationService {
             }
             items.add(new SeatAvailabilityResponse(
                     seat.getId(), seat.getLabel(), seat.getRowLabel(), seat.getRowIndex(),
-                    seat.getSeatNumber(), seat.getSeatType(), priceByType.get(seat.getSeatType()), status));
+                    seat.getSeatNumber(), seat.getSeatType(), seat.getLayoutX(), seat.getLayoutY(),
+                    seat.getRotationDegrees(), seat.getLayoutWidth(), seat.getLayoutHeight(),
+                    seat.getSectionName(), priceByType.get(seat.getSeatType()), status));
         }
 
         return new EventSeatMapResponse(eventId, hall.getId(), hall.getName(), true,
-                seats.size(), available, reserved, booked, items);
+                hall.getLayoutWidth(), hall.getLayoutHeight(), seats.size(), available, reserved, booked, items);
     }
 
     private Map<Long, SeatAvailabilityStatus> resolveActiveSeatStatuses(Long eventId, Instant now) {

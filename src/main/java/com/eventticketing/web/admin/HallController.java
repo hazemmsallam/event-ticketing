@@ -4,6 +4,8 @@ import com.eventticketing.catalog.dto.CreateHallRequest;
 import com.eventticketing.catalog.dto.HallResponse;
 import com.eventticketing.catalog.dto.HallSummaryResponse;
 import com.eventticketing.catalog.dto.UpdateHallRequest;
+import com.eventticketing.catalog.dto.UpdateHallSeatsRequest;
+import com.eventticketing.catalog.dto.UpdateSeatLayoutRequest;
 import com.eventticketing.catalog.service.HallService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -48,6 +50,16 @@ public class HallController {
     @PutMapping("/{id}")
     public HallResponse update(@PathVariable Long id, @Valid @RequestBody UpdateHallRequest request) {
         return hallService.update(id, request);
+    }
+
+    @PutMapping("/{id}/layout")
+    public HallResponse updateLayout(@PathVariable Long id, @Valid @RequestBody UpdateSeatLayoutRequest request) {
+        return hallService.updateLayout(id, request);
+    }
+
+    @PutMapping("/{id}/seats")
+    public HallResponse updateSeats(@PathVariable Long id, @Valid @RequestBody UpdateHallSeatsRequest request) {
+        return hallService.updateSeats(id, request);
     }
 
     @DeleteMapping("/{id}")

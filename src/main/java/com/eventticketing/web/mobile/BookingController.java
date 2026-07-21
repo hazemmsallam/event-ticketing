@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Mobile: hold seats/tickets, change seats, pay, and cancel. */
+import java.util.List;
+
+/** Mobile: hold seats/tickets, view history, change seats, pay, and cancel. */
 @RestController
 @RequestMapping("/api/bookings")
 public class BookingController {
@@ -36,6 +38,12 @@ public class BookingController {
     @PostMapping
     public ResponseEntity<BookingResponse> create(@Valid @RequestBody CreateBookingRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(reservationService.createBooking(request));
+    }
+
+    /** Booking history for the current customer, newest first. */
+    @GetMapping
+    public List<BookingResponse> list(@RequestHeader("X-Customer-Ref") String customerRef) {
+        return reservationService.listBookings(customerRef);
     }
 
     @GetMapping("/{id}")

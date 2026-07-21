@@ -11,6 +11,8 @@ public record EventSeatMapResponse(
         Long hallId,
         String hallName,
         boolean seated,
+        Integer layoutWidth,
+        Integer layoutHeight,
         int totalSeats,
         long availableCount,
         long reservedCount,
