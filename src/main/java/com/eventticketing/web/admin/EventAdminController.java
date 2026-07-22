@@ -1,4 +1,4 @@
-package com.eventticketing.catalog.web;
+package com.eventticketing.web.admin;
 
 import com.eventticketing.catalog.dto.CreateEventRequest;
 import com.eventticketing.catalog.dto.EventResponse;
@@ -9,6 +9,7 @@ import com.eventticketing.catalog.service.EventService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,13 +21,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/** Admin: create and manage events, pricing and status. */
 @RestController
 @RequestMapping("/api/events")
-public class EventController {
+public class EventAdminController {
 
     private final EventService eventService;
 
-    public EventController(EventService eventService) {
+    public EventAdminController(EventService eventService) {
         this.eventService = eventService;
     }
 
@@ -41,15 +43,15 @@ public class EventController {
         return eventService.listAll();
     }
 
-    /** Mobile listing: events open to booking (PUBLISHED / SOLD_OUT). */
-    @GetMapping("/available")
-    public List<EventSummaryResponse> listAvailable() {
-        return eventService.listAvailable();
+    @PutMapping("/{id}")
+    public EventResponse update(@PathVariable Long id, @Valid @RequestBody CreateEventRequest request) {
+        return eventService.update(id, request);
     }
 
-    @GetMapping("/{id}")
-    public EventResponse get(@PathVariable Long id) {
-        return eventService.get(id);
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        eventService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{id}/pricing")

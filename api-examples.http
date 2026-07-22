@@ -99,11 +99,23 @@ Content-Type: application/json
 
 { "eventId": 2, "customerRef": "user-42", "quantity": 2 }
 
-### Get a booking (check status / expiry)
+### Get a booking (check status / expiry).
+### Booking-scoped calls require X-Customer-Ref = the customerRef that owns the booking;
+### a mismatch returns 404 so ids can't be probed.
 GET {{host}}/api/bookings/1
+X-Customer-Ref: user-42
+
+### Change the seats on an unpaid hold (atomic swap; resets the hold timer)
+PUT {{host}}/api/bookings/1/seats
+Content-Type: application/json
+X-Customer-Ref: user-42
+
+{ "seatIds": [2, 3] }
 
 ### Pay (fake gateway — always succeeds; confirms the hold)
 POST {{host}}/api/bookings/1/payment
+X-Customer-Ref: user-42
 
 ### Cancel a pending hold (releases the seats)
 DELETE {{host}}/api/bookings/1
+X-Customer-Ref: user-42

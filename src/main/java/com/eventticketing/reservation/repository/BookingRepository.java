@@ -2,6 +2,7 @@ package com.eventticketing.reservation.repository;
 
 import com.eventticketing.reservation.domain.Booking;
 import com.eventticketing.reservation.domain.BookingStatus;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +15,15 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByStatusAndExpiresAtBefore(BookingStatus status, Instant time);
 
     List<Booking> findByEventIdAndStatusAndExpiresAtBefore(Long eventId, BookingStatus status, Instant time);
+
+    @EntityGraph(attributePaths = {"event", "bookingSeats", "bookingSeats.seat"})
+    @Query("""
+            select distinct b
+            from Booking b
+            where b.customerRef = :customerRef
+            order by b.createdAt desc, b.id desc
+            """)
+    List<Booking> findByCustomerRefOrderByCreatedAtDescIdDesc(@Param("customerRef") String customerRef);
 
     /** Confirmed (paid) units for a non-seated event; these always occupy capacity. */
     @Query("""

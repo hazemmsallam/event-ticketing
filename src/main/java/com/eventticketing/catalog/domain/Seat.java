@@ -46,4 +46,22 @@ public class Seat extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "seat_type", nullable = false, length = 16)
     private SeatType seatType;
+
+    @Column(name = "layout_x")
+    private Integer layoutX;
+
+    @Column(name = "layout_y")
+    private Integer layoutY;
+
+    @Column(name = "rotation_degrees")
+    private Integer rotationDegrees;
+
+    @Column(name = "layout_width")
+    private Integer layoutWidth;
+
+    @Column(name = "layout_height")
+    private Integer layoutHeight;
+
+    @Column(name = "section_name", length = 80)
+    private String sectionName;
 }

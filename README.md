@@ -19,11 +19,18 @@ services:
 ```
 com.eventticketing
 ├── catalog      Organizer, Hall, Seat, Event, EventPricing  (predefined, admin-managed)
-├── reservation  Booking, BookingSeat, hold/lock logic, expiry sweeper, live availability
+├── reservation  Booking, BookingSeat, Payment, hold/lock logic, expiry + reconciliation
 ├── payment      PaymentGateway abstraction + FakePaymentGateway (always-approves)
+├── web
+│   ├── mobile   endpoints the mobile app calls (browse, live seat map, bookings, payment)
+│   └── admin    endpoints for catalog management (organizers, halls, events, pricing)
 ├── demo         optional startup data seeder
 └── common       BaseEntity, error handling, Clock
 ```
+
+Controllers are grouped by **client** under `web.mobile` and `web.admin`; both call the same
+domain services. (The separate [admin console](https://github.com/hazemmsallam/admin) is a UI in
+its own repo that drives the `web.admin` endpoints.)
 
 - **MySQL** is the single source of truth; **Flyway** owns the schema (Hibernate `ddl-auto: none`).
 - **Redis** caches the availability reads with a short TTL, invalidated on booking events (see [Caching](#caching)).
@@ -51,7 +58,8 @@ new bookings; publishing requires complete pricing.
 3. Seated → `GET /api/events/{id}/seats` for the live map; non-seated → `GET /api/events/{id}/availability`.
 4. `POST /api/bookings` — reserve ≤ 2 seats (or N GA tickets). Returns the hold and its `expiresAt`.
 5. `POST /api/bookings/{id}/payment` — fake payment; on success the hold becomes a confirmed booking.
-6. Unpaid holds auto-release after the configured window (default 10 min).
+6. `GET /api/bookings` with `X-Customer-Ref` - show that user's booking history, newest first.
+7. Unpaid holds auto-release after the configured window (default 10 min).
 
 ## How double-booking is prevented (the important part)
 
@@ -209,15 +217,22 @@ available and able to pull `mysql:8.0`.
 | GET  | `/api/events/{id}/seats` | Live seat map (seated) |
 | GET  | `/api/events/{id}/availability` | Live capacity (non-seated) |
 | POST | `/api/bookings` | Hold seats / tickets |
+| GET  | `/api/bookings` | Customer booking history |
 | GET  | `/api/bookings/{id}` | Booking status |
+| PUT  | `/api/bookings/{id}/seats` | Change seats on an unpaid hold (atomic swap) |
 | POST | `/api/bookings/{id}/payment` | Fake payment → confirm |
 | DELETE | `/api/bookings/{id}` | Release a pending hold |
 
 ## Notes & current scope
 
-- **Authentication is intentionally deferred.** Bookings carry a `customerRef` string as a
-  placeholder for the authenticated user; wire in Spring Security / JWT later without touching
-  the reservation core.
+- **Booking ownership is enforced.** Every customer booking call (list / get / change seats / pay /
+  cancel) must send an `X-Customer-Ref` header. The history endpoint uses it to scope the list;
+  booking-id calls require it to match the booking owner and return `404` on mismatch so ids can't
+  be probed. This is object-level authorization — you can't act on someone else's booking.
+- **Authentication itself is still deferred.** Today `customerRef` is asserted by the client
+  (via the header), so use an opaque, unguessable value per user. The proper completion is JWT:
+  the identity moves from a client header to a verified token, and `getOwnedBooking(...)` reads
+  the subject from the security context instead — the ownership check stays exactly the same.
 - Payment is a `FakePaymentGateway` that always approves, but the surrounding flow is
   production-shaped: charge outside the transaction, a durable `Payment` record, and a
   reconciliation job that confirms-or-refunds in-doubt charges (see [Payments &

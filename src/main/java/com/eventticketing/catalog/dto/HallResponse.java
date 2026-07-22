@@ -14,10 +14,13 @@ public record HallResponse(
         Integer numRows,
         Integer numColumns,
         SeatNumberingScheme numberingScheme,
+        Integer layoutWidth,
+        Integer layoutHeight,
         List<SeatResponse> seats
 ) {
     public static HallResponse from(Hall h, List<SeatResponse> seats) {
         return new HallResponse(h.getId(), h.getName(), h.getAddress(), h.getCapacity(),
-                h.isSeated(), h.getNumRows(), h.getNumColumns(), h.getNumberingScheme(), seats);
+                h.isSeated(), h.getNumRows(), h.getNumColumns(), h.getNumberingScheme(),
+                h.getLayoutWidth(), h.getLayoutHeight(), seats);
     }
 }

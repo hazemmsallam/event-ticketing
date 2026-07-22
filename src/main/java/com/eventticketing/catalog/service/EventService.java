@@ -69,6 +69,44 @@ public class EventService {
     }
 
     @Transactional
+    public EventResponse update(Long id, CreateEventRequest request) {
+        Event event = getEntity(id);
+        if (!request.endAt().isAfter(request.startAt())) {
+            throw new BusinessRuleException("Event endAt must be after startAt.");
+        }
+        Organizer organizer = organizerService.getEntity(request.organizerId());
+        Hall hall = hallService.getEntity(request.hallId());
+
+        boolean changingHall = !hall.getId().equals(event.getHall().getId());
+        if (changingHall && event.getStatus() != EventStatus.DRAFT) {
+            throw new BusinessRuleException("The hall can only be changed while the event is in DRAFT.");
+        }
+        if (request.maxCapacity() > hall.getCapacity()) {
+            throw new BusinessRuleException(
+                    "maxCapacity %d exceeds hall capacity %d.".formatted(request.maxCapacity(), hall.getCapacity()));
+        }
+
+        event.setName(request.name());
+        event.setDescription(request.description());
+        event.setCategory(request.category());
+        event.setStartAt(request.startAt());
+        event.setEndAt(request.endAt());
+        event.setOrganizer(organizer);
+        event.setMaxCapacity(request.maxCapacity());
+        if (changingHall) {
+            // Seat types may differ in the new hall, so previously configured pricing no longer applies.
+            event.setHall(hall);
+            event.clearPricing();
+        }
+        return toResponse(event);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        eventRepository.delete(getEntity(id));
+    }
+
+    @Transactional
     public EventResponse setPricing(Long eventId, SetEventPricingRequest request) {
         Event event = getEntity(eventId);
         Hall hall = event.getHall();

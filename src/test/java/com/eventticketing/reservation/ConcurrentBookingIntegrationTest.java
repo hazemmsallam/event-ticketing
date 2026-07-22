@@ -13,6 +13,7 @@ import com.eventticketing.catalog.service.HallService;
 import com.eventticketing.catalog.service.OrganizerService;
 import com.eventticketing.common.exception.ConflictException;
 import com.eventticketing.reservation.domain.BookingSeatStatus;
+import com.eventticketing.reservation.dto.BookingResponse;
 import com.eventticketing.reservation.dto.CreateBookingRequest;
 import com.eventticketing.reservation.repository.BookingSeatRepository;
 import com.eventticketing.reservation.service.ReservationService;
@@ -111,5 +112,35 @@ class ConcurrentBookingIntegrationTest {
         assertThat(success.get()).isEqualTo(1);
         assertThat(conflicts.get()).isEqualTo(threads - 1);
         assertThat(bookingSeatRepository.countByEventIdAndStatus(eventId, BookingSeatStatus.HELD)).isEqualTo(1);
+    }
+
+    @Test
+    void listsOnlyTheCustomersBookingsNewestFirst() {
+        Long organizerId = organizerService.create(
+                new CreateOrganizerRequest("History Events", "history@example.com", "+101")).id();
+
+        HallResponse hall = hallService.create(new CreateHallRequest(
+                "History Arena", "2 Main St", false, null, null, null, List.of(), 10));
+
+        Instant start = Instant.now().plus(2, ChronoUnit.DAYS);
+        Long eventId = eventService.create(new CreateEventRequest(
+                "History Show", "desc", "Music", start, start.plus(2, ChronoUnit.HOURS),
+                organizerId, hall.id(), 10)).id();
+        eventService.setPricing(eventId,
+                new SetEventPricingRequest(List.of(new PricingItem(null, new BigDecimal("25.00")))));
+        eventService.updateStatus(eventId, EventStatus.PUBLISHED);
+
+        BookingResponse first = reservationService.createBooking(
+                new CreateBookingRequest(eventId, "history-user", null, 1));
+        reservationService.createBooking(
+                new CreateBookingRequest(eventId, "other-user", null, 1));
+        BookingResponse second = reservationService.createBooking(
+                new CreateBookingRequest(eventId, "history-user", null, 2));
+
+        List<BookingResponse> history = reservationService.listBookings("history-user");
+
+        assertThat(history).extracting(BookingResponse::id).containsExactly(second.id(), first.id());
+        assertThat(history).extracting(BookingResponse::customerRef).containsOnly("history-user");
+        assertThat(history).extracting(BookingResponse::eventName).containsOnly("History Show");
     }
 }

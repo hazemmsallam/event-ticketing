@@ -34,8 +34,8 @@ public class PaymentService {
         this.paymentGateway = paymentGateway;
     }
 
-    public PaymentResponse pay(Long bookingId) {
-        PaymentContext ctx = reservationService.beginPayment(bookingId);
+    public PaymentResponse pay(Long bookingId, String customerRef) {
+        PaymentContext ctx = reservationService.beginPayment(bookingId, customerRef);
 
         PaymentResult result;
         try {

@@ -1,21 +1,27 @@
-package com.eventticketing.catalog.web;
+package com.eventticketing.web.admin;
 
 import com.eventticketing.catalog.dto.CreateHallRequest;
 import com.eventticketing.catalog.dto.HallResponse;
 import com.eventticketing.catalog.dto.HallSummaryResponse;
+import com.eventticketing.catalog.dto.UpdateHallRequest;
+import com.eventticketing.catalog.dto.UpdateHallSeatsRequest;
+import com.eventticketing.catalog.dto.UpdateSeatLayoutRequest;
 import com.eventticketing.catalog.service.HallService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/** Admin: manage halls and their seat layouts. */
 @RestController
 @RequestMapping("/api/halls")
 public class HallController {
@@ -39,5 +45,26 @@ public class HallController {
     @GetMapping("/{id}")
     public HallResponse get(@PathVariable Long id) {
         return hallService.get(id);
+    }
+
+    @PutMapping("/{id}")
+    public HallResponse update(@PathVariable Long id, @Valid @RequestBody UpdateHallRequest request) {
+        return hallService.update(id, request);
+    }
+
+    @PutMapping("/{id}/layout")
+    public HallResponse updateLayout(@PathVariable Long id, @Valid @RequestBody UpdateSeatLayoutRequest request) {
+        return hallService.updateLayout(id, request);
+    }
+
+    @PutMapping("/{id}/seats")
+    public HallResponse updateSeats(@PathVariable Long id, @Valid @RequestBody UpdateHallSeatsRequest request) {
+        return hallService.updateSeats(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        hallService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }
