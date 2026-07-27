@@ -57,8 +57,21 @@ public class Hall extends BaseEntity {
     @OrderBy("rowIndex ASC, seatNumber ASC")
     private List<Seat> seats = new ArrayList<>();
 
+    /**
+     * Non-bookable decoration objects (tables, …) placed in this hall's layout. Kept separate from
+     * {@link #seats} so capacity and booking logic never sees them.
+     */
+    @OneToMany(mappedBy = "hall", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
+    private List<LayoutObject> layoutObjects = new ArrayList<>();
+
     public void addSeat(Seat seat) {
         seat.setHall(this);
         this.seats.add(seat);
+    }
+
+    public void addLayoutObject(LayoutObject layoutObject) {
+        layoutObject.setHall(this);
+        this.layoutObjects.add(layoutObject);
     }
 }

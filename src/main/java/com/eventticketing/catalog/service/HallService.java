@@ -1,12 +1,17 @@
 package com.eventticketing.catalog.service;
 
 import com.eventticketing.catalog.domain.Hall;
+import com.eventticketing.catalog.domain.LayoutObject;
+import com.eventticketing.catalog.domain.LayoutObjectType;
 import com.eventticketing.catalog.domain.Seat;
 import com.eventticketing.catalog.domain.SeatNumberingScheme;
 import com.eventticketing.catalog.domain.SeatType;
+import com.eventticketing.catalog.domain.TableShape;
 import com.eventticketing.catalog.dto.CreateHallRequest;
 import com.eventticketing.catalog.dto.HallResponse;
 import com.eventticketing.catalog.dto.HallSummaryResponse;
+import com.eventticketing.catalog.dto.LayoutObjectItem;
+import com.eventticketing.catalog.dto.LayoutObjectResponse;
 import com.eventticketing.catalog.dto.RowTypeRange;
 import com.eventticketing.catalog.dto.SeatResponse;
 import com.eventticketing.catalog.dto.SeatEditItem;
@@ -251,9 +256,91 @@ public class HallService {
         }
 
         recomputeGridStats(hall);
-        // Flush so newly created seats receive their IDs before we map them into the response.
+
+        // Reconcile non-bookable layout objects (tables). null = leave them untouched; a list
+        // (possibly empty) is the full desired set. Objects never affect capacity or bookings.
+        if (request.layoutObjects() != null) {
+            reconcileLayoutObjects(hall, request.layoutObjects(), canvasWidth, canvasHeight);
+        }
+
+        // Flush so newly created seats/objects receive their IDs before we map them into the response.
         entityManager.flush();
         return toResponse(hall);
+    }
+
+    /**
+     * Reconciles the hall's non-bookable layout objects against the full desired set: updates those
+     * sent with an id, creates those without one, and deletes existing objects left out. Unlike
+     * seats, objects are never bookable, so deletion is unconditional.
+     */
+    private void reconcileLayoutObjects(Hall hall, List<LayoutObjectItem> items,
+                                        int canvasWidth, int canvasHeight) {
+        Map<Long, LayoutObject> existingById = hall.getLayoutObjects().stream()
+                .collect(Collectors.toMap(LayoutObject::getId, Function.identity()));
+
+        // Validate the whole request before mutating anything.
+        for (LayoutObjectItem item : items) {
+            if (item.id() != null && !existingById.containsKey(item.id())) {
+                throw ResourceNotFoundException.of("LayoutObject", item.id());
+            }
+            validateLayoutObject(item, canvasWidth, canvasHeight);
+        }
+
+        Set<Long> keptIds = items.stream()
+                .map(LayoutObjectItem::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        hall.getLayoutObjects().removeIf(obj -> !keptIds.contains(obj.getId()));
+
+        for (LayoutObjectItem item : items) {
+            LayoutObject obj;
+            if (item.id() != null) {
+                obj = existingById.get(item.id());
+            } else {
+                obj = new LayoutObject();
+                hall.addLayoutObject(obj);
+            }
+            obj.setObjectType(item.objectType() != null ? item.objectType() : LayoutObjectType.TABLE);
+            obj.setShape(item.shape());
+            obj.setLabel(normalizeLabel(item.label()));
+            obj.setLayoutX(item.layoutX());
+            obj.setLayoutY(item.layoutY());
+            obj.setLayoutZ(item.layoutZ());
+            obj.setRotationDegrees(item.rotationDegrees());
+            obj.setLayoutWidth(item.layoutWidth());
+            obj.setLayoutDepth(item.layoutDepth());
+            obj.setObjectHeight(item.objectHeight());
+        }
+    }
+
+    private void validateLayoutObject(LayoutObjectItem item, int canvasWidth, int canvasHeight) {
+        LayoutObjectType type = item.objectType() != null ? item.objectType() : LayoutObjectType.TABLE;
+        if (type == LayoutObjectType.TABLE && item.shape() == null) {
+            throw new BusinessRuleException("A table requires a shape (SQUARE, RECTANGLE or CIRCLE).");
+        }
+        if (item.layoutX() < 0 || item.layoutY() < 0) {
+            throw new BusinessRuleException("Layout object coordinates cannot be negative.");
+        }
+        if (item.layoutX() > canvasWidth || item.layoutY() > canvasHeight) {
+            throw new BusinessRuleException("Layout object must fit inside the hall canvas.");
+        }
+        if (item.shape() == TableShape.CIRCLE && !item.layoutWidth().equals(item.layoutDepth())) {
+            throw new BusinessRuleException("A circular table's width and diameter must match.");
+        }
+        if (item.shape() == TableShape.SQUARE && !item.layoutWidth().equals(item.layoutDepth())) {
+            throw new BusinessRuleException("A square table's width and length must match.");
+        }
+    }
+
+    private String normalizeLabel(String label) {
+        if (label == null || label.isBlank()) {
+            return null;
+        }
+        String normalized = label.trim();
+        if (normalized.length() > 80) {
+            throw new BusinessRuleException("Label must be 80 characters or fewer.");
+        }
+        return normalized;
     }
 
     private void recomputeGridStats(Hall hall) {
@@ -291,7 +378,9 @@ public class HallService {
 
     private HallResponse toResponse(Hall hall) {
         List<SeatResponse> seats = hall.getSeats().stream().map(SeatResponse::from).toList();
-        return HallResponse.from(hall, seats);
+        List<LayoutObjectResponse> layoutObjects = hall.getLayoutObjects().stream()
+                .map(LayoutObjectResponse::from).toList();
+        return HallResponse.from(hall, seats, layoutObjects);
     }
 
     private int defaultLayoutWidth(int cols) {
