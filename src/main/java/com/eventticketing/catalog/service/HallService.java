@@ -6,14 +6,20 @@ import com.eventticketing.catalog.domain.LayoutObjectType;
 import com.eventticketing.catalog.domain.Seat;
 import com.eventticketing.catalog.domain.SeatNumberingScheme;
 import com.eventticketing.catalog.domain.SeatType;
+import com.eventticketing.catalog.domain.Section;
+import com.eventticketing.catalog.domain.SectionBookingMode;
 import com.eventticketing.catalog.domain.TableShape;
 import com.eventticketing.catalog.dto.CreateHallRequest;
 import com.eventticketing.catalog.dto.HallResponse;
 import com.eventticketing.catalog.dto.HallSummaryResponse;
 import com.eventticketing.catalog.dto.LayoutObjectItem;
 import com.eventticketing.catalog.dto.LayoutObjectResponse;
+import com.eventticketing.catalog.dto.PointItem;
 import com.eventticketing.catalog.dto.RowTypeRange;
 import com.eventticketing.catalog.dto.SeatResponse;
+import com.eventticketing.catalog.dto.SectionItem;
+import com.eventticketing.catalog.dto.SectionResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.eventticketing.catalog.dto.SeatEditItem;
 import com.eventticketing.catalog.dto.SeatLayoutItem;
 import com.eventticketing.catalog.dto.UpdateHallRequest;
@@ -42,13 +48,16 @@ public class HallService {
 
     private final HallRepository hallRepository;
     private final BookingSeatRepository bookingSeatRepository;
+    private final ObjectMapper objectMapper;
 
     @PersistenceContext
     private EntityManager entityManager;
 
-    public HallService(HallRepository hallRepository, BookingSeatRepository bookingSeatRepository) {
+    public HallService(HallRepository hallRepository, BookingSeatRepository bookingSeatRepository,
+                       ObjectMapper objectMapper) {
         this.hallRepository = hallRepository;
         this.bookingSeatRepository = bookingSeatRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -246,7 +255,9 @@ public class HallService {
             seat.setRowLabel(item.rowLabel().trim());
             seat.setRowIndex(item.rowIndex());
             seat.setSeatNumber(item.seatNumber());
-            seat.setSeatType(item.seatType());
+            // seatType is legacy/optional now that price comes from the section; keep the column
+            // populated (it is NOT NULL) by defaulting to REGULAR when the client omits it.
+            seat.setSeatType(item.seatType() != null ? item.seatType() : SeatType.REGULAR);
             seat.setLayoutX(item.layoutX());
             seat.setLayoutY(item.layoutY());
             seat.setRotationDegrees(item.rotationDegrees());
@@ -263,9 +274,106 @@ public class HallService {
             reconcileLayoutObjects(hall, request.layoutObjects(), canvasWidth, canvasHeight);
         }
 
-        // Flush so newly created seats/objects receive their IDs before we map them into the response.
+        // Reconcile sections, then assign each seat to the SEATED section that visually contains it.
+        if (request.sections() != null) {
+            reconcileSections(hall, request.sections());
+            assignSeatsToSections(hall);
+        }
+
+        // Flush so newly created seats/objects/sections receive their IDs before mapping to response.
         entityManager.flush();
         return toResponse(hall);
+    }
+
+    /**
+     * Reconciles the hall's sections against the full desired set. Deleting a section detaches its
+     * seats (they simply become unassigned) but never touches bookings — sections are catalog data.
+     */
+    private void reconcileSections(Hall hall, List<SectionItem> items) {
+        Map<Long, Section> existingById = hall.getSections().stream()
+                .collect(Collectors.toMap(Section::getId, Function.identity()));
+
+        for (SectionItem item : items) {
+            if (item.id() != null && !existingById.containsKey(item.id())) {
+                throw ResourceNotFoundException.of("Section", item.id());
+            }
+            if (item.bookingMode() == SectionBookingMode.GENERAL_ADMISSION
+                    && (item.capacity() == null || item.capacity() < 1)) {
+                throw new BusinessRuleException(
+                        "A general-admission section requires a capacity of at least 1.");
+            }
+        }
+
+        Set<Long> keptIds = items.stream()
+                .map(SectionItem::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        // Detach seats of sections about to be removed so we don't violate the FK.
+        List<Long> removedIds = hall.getSections().stream()
+                .map(Section::getId)
+                .filter(id -> !keptIds.contains(id))
+                .toList();
+        if (!removedIds.isEmpty()) {
+            for (Seat seat : hall.getSeats()) {
+                if (seat.getSection() != null && removedIds.contains(seat.getSection().getId())) {
+                    seat.setSection(null);
+                }
+            }
+        }
+        hall.getSections().removeIf(s -> !keptIds.contains(s.getId()));
+
+        for (SectionItem item : items) {
+            Section section;
+            if (item.id() != null) {
+                section = existingById.get(item.id());
+            } else {
+                section = new Section();
+                hall.addSection(section);
+            }
+            section.setName(item.name().trim());
+            section.setBookingMode(item.bookingMode());
+            section.setDefaultPrice(item.defaultPrice());
+            section.setCurrency(item.currency() != null && !item.currency().isBlank()
+                    ? item.currency().trim() : null);
+            section.setCapacity(item.bookingMode() == SectionBookingMode.GENERAL_ADMISSION
+                    ? item.capacity() : null);
+            section.setShapeKind(item.shapeKind());
+            section.setColor(item.color());
+            section.setPoints(SectionGeometry.toJson(objectMapper, item.points()));
+        }
+    }
+
+    /**
+     * Assigns every seat to the SEATED section whose polygon contains the seat's centre. Seats not
+     * inside any seated section are left unassigned. GA sections never own seats.
+     */
+    private void assignSeatsToSections(Hall hall) {
+        List<Section> seated = hall.getSections().stream()
+                .filter(s -> s.getBookingMode() == SectionBookingMode.SEATED)
+                .toList();
+        // Parse each seated section's polygon once. Keyed positionally (new sections have no id yet).
+        List<List<PointItem>> polygons = seated.stream()
+                .map(s -> SectionGeometry.fromJson(objectMapper, s.getPoints()))
+                .toList();
+
+        for (Seat seat : hall.getSeats()) {
+            Integer lx = seat.getLayoutX(), ly = seat.getLayoutY();
+            Integer lw = seat.getLayoutWidth(), lh = seat.getLayoutHeight();
+            if (lx == null || ly == null || lw == null || lh == null) {
+                seat.setSection(null);
+                continue;
+            }
+            double cx = lx + lw / 2.0;
+            double cy = ly + lh / 2.0;
+            Section match = null;
+            for (int i = 0; i < seated.size(); i++) {
+                if (SectionGeometry.contains(polygons.get(i), cx, cy)) {
+                    match = seated.get(i);
+                    break;
+                }
+            }
+            seat.setSection(match);
+        }
     }
 
     /**
@@ -380,7 +488,10 @@ public class HallService {
         List<SeatResponse> seats = hall.getSeats().stream().map(SeatResponse::from).toList();
         List<LayoutObjectResponse> layoutObjects = hall.getLayoutObjects().stream()
                 .map(LayoutObjectResponse::from).toList();
-        return HallResponse.from(hall, seats, layoutObjects);
+        List<SectionResponse> sections = hall.getSections().stream()
+                .map(s -> SectionResponse.from(s, SectionGeometry.fromJson(objectMapper, s.getPoints())))
+                .toList();
+        return HallResponse.from(hall, seats, layoutObjects, sections);
     }
 
     private int defaultLayoutWidth(int cols) {

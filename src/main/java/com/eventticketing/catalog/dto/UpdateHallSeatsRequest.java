@@ -20,6 +20,12 @@ public record UpdateHallSeatsRequest(
          * hall's existing objects untouched (older clients that don't manage tables); an empty
          * list clears them; otherwise the service reconciles create/update/delete like seats.
          */
-        @Valid List<LayoutObjectItem> layoutObjects
+        @Valid List<LayoutObjectItem> layoutObjects,
+        /**
+         * Full desired set of hall sections. {@code null} leaves existing sections untouched; a
+         * list (possibly empty) is reconciled create/update/delete. Seats reference these by
+         * {@link SeatEditItem#sectionId()} (matched to a section's id, or a client draft key).
+         */
+        @Valid List<SectionItem> sections
 ) {
 }

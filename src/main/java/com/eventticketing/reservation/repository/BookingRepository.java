@@ -43,4 +43,23 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
               and b.expiresAt > :now
             """)
     long sumReservedQuantity(@Param("eventId") Long eventId, @Param("now") Instant now);
+
+    /** Confirmed (paid) tickets in a general-admission section. */
+    @Query("""
+            select coalesce(sum(b.quantity), 0)
+            from Booking b
+            where b.section.id = :sectionId
+              and b.status = com.eventticketing.reservation.domain.BookingStatus.CONFIRMED
+            """)
+    long sumConfirmedQuantityBySection(@Param("sectionId") Long sectionId);
+
+    /** Reserved (pending, unexpired) tickets in a general-admission section. */
+    @Query("""
+            select coalesce(sum(b.quantity), 0)
+            from Booking b
+            where b.section.id = :sectionId
+              and b.status = com.eventticketing.reservation.domain.BookingStatus.PENDING_PAYMENT
+              and b.expiresAt > :now
+            """)
+    long sumReservedQuantityBySection(@Param("sectionId") Long sectionId, @Param("now") Instant now);
 }

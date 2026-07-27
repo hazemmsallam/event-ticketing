@@ -65,6 +65,11 @@ public class Hall extends BaseEntity {
     @OrderBy("id ASC")
     private List<LayoutObject> layoutObjects = new ArrayList<>();
 
+    /** First-class hall sections (dynamic name/price/mode/capacity/geometry). */
+    @OneToMany(mappedBy = "hall", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
+    private List<Section> sections = new ArrayList<>();
+
     public void addSeat(Seat seat) {
         seat.setHall(this);
         this.seats.add(seat);
@@ -73,5 +78,10 @@ public class Hall extends BaseEntity {
     public void addLayoutObject(LayoutObject layoutObject) {
         layoutObject.setHall(this);
         this.layoutObjects.add(layoutObject);
+    }
+
+    public void addSection(Section section) {
+        section.setHall(this);
+        this.sections.add(section);
     }
 }

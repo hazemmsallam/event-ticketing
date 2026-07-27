@@ -15,11 +15,13 @@ public record SeatResponse(
         Integer rotationDegrees,
         Integer layoutWidth,
         Integer layoutHeight,
-        String sectionName
+        String sectionName,
+        Long sectionId
 ) {
     public static SeatResponse from(Seat s) {
         return new SeatResponse(s.getId(), s.getLabel(), s.getRowLabel(), s.getRowIndex(),
                 s.getSeatNumber(), s.getSeatType(), s.getLayoutX(), s.getLayoutY(),
-                s.getRotationDegrees(), s.getLayoutWidth(), s.getLayoutHeight(), s.getSectionName());
+                s.getRotationDegrees(), s.getLayoutWidth(), s.getLayoutHeight(), s.getSectionName(),
+                s.getSection() != null ? s.getSection().getId() : null);
     }
 }

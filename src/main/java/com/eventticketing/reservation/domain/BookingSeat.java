@@ -48,8 +48,19 @@ public class BookingSeat extends BaseEntity {
     private Seat seat;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "seat_type", nullable = false, length = 16)
+    @Column(name = "seat_type", length = 16)
     private SeatType seatType;
+
+    /** Snapshot of the seat's section at hold time (id + name), insulated from later edits. */
+    @Column(name = "section_id")
+    private Long sectionId;
+
+    @Column(name = "section_name", length = 120)
+    private String sectionName;
+
+    /** Currency snapshot (from the section). */
+    @Column(name = "currency", length = 8)
+    private String currency;
 
     /** Price snapshot at hold time, insulating the booking from later price changes. */
     @Column(name = "price", nullable = false, precision = 12, scale = 2)

@@ -76,7 +76,7 @@ class ConcurrentBookingIntegrationTest {
                 "Gala", "desc", "Music", start, start.plus(2, ChronoUnit.HOURS),
                 organizerId, hallId, 1)).id();
         eventService.setPricing(eventId,
-                new SetEventPricingRequest(List.of(new PricingItem(SeatType.REGULAR, new BigDecimal("100.00")))));
+                new SetEventPricingRequest(List.of(new PricingItem(SeatType.REGULAR, null, new BigDecimal("100.00")))));
         eventService.updateStatus(eventId, EventStatus.PUBLISHED);
 
         int threads = 8;
@@ -92,7 +92,7 @@ class ConcurrentBookingIntegrationTest {
                 try {
                     startGate.await();
                     reservationService.createBooking(
-                            new CreateBookingRequest(eventId, "user-" + n, List.of(seatId), null));
+                            new CreateBookingRequest(eventId, "user-" + n, List.of(seatId), null, null));
                     success.incrementAndGet();
                 } catch (ConflictException e) {
                     conflicts.incrementAndGet();
@@ -127,15 +127,15 @@ class ConcurrentBookingIntegrationTest {
                 "History Show", "desc", "Music", start, start.plus(2, ChronoUnit.HOURS),
                 organizerId, hall.id(), 10)).id();
         eventService.setPricing(eventId,
-                new SetEventPricingRequest(List.of(new PricingItem(null, new BigDecimal("25.00")))));
+                new SetEventPricingRequest(List.of(new PricingItem(null, null, new BigDecimal("25.00")))));
         eventService.updateStatus(eventId, EventStatus.PUBLISHED);
 
         BookingResponse first = reservationService.createBooking(
-                new CreateBookingRequest(eventId, "history-user", null, 1));
+                new CreateBookingRequest(eventId, "history-user", null, null, 1));
         reservationService.createBooking(
-                new CreateBookingRequest(eventId, "other-user", null, 1));
+                new CreateBookingRequest(eventId, "other-user", null, null, 1));
         BookingResponse second = reservationService.createBooking(
-                new CreateBookingRequest(eventId, "history-user", null, 2));
+                new CreateBookingRequest(eventId, "history-user", null, null, 2));
 
         List<BookingResponse> history = reservationService.listBookings("history-user");
 
