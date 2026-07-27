@@ -1,5 +1,7 @@
 package com.eventticketing.reservation.dto;
 
+import com.eventticketing.catalog.dto.LayoutObjectResponse;
+
 import java.util.List;
 
 /**
@@ -17,6 +19,11 @@ public record EventSeatMapResponse(
         long availableCount,
         long reservedCount,
         long bookedCount,
-        List<SeatAvailabilityResponse> seats
+        List<SeatAvailabilityResponse> seats,
+        /**
+         * Non-bookable layout objects (tables, …) so the customer 3D view can render the physical
+         * layout. These carry geometry only — no availability or price — and cannot be selected.
+         */
+        List<LayoutObjectResponse> layoutObjects
 ) {
 }

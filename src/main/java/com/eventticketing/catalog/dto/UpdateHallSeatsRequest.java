@@ -14,6 +14,12 @@ import java.util.List;
 public record UpdateHallSeatsRequest(
         @NotNull @Min(320) Integer layoutWidth,
         @NotNull @Min(240) Integer layoutHeight,
-        @NotEmpty @Valid List<SeatEditItem> seats
+        @NotEmpty @Valid List<SeatEditItem> seats,
+        /**
+         * Full desired set of non-bookable layout objects (tables, …). {@code null} leaves the
+         * hall's existing objects untouched (older clients that don't manage tables); an empty
+         * list clears them; otherwise the service reconciles create/update/delete like seats.
+         */
+        @Valid List<LayoutObjectItem> layoutObjects
 ) {
 }

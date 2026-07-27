@@ -16,11 +16,13 @@ public record HallResponse(
         SeatNumberingScheme numberingScheme,
         Integer layoutWidth,
         Integer layoutHeight,
-        List<SeatResponse> seats
+        List<SeatResponse> seats,
+        List<LayoutObjectResponse> layoutObjects
 ) {
-    public static HallResponse from(Hall h, List<SeatResponse> seats) {
+    public static HallResponse from(Hall h, List<SeatResponse> seats,
+                                    List<LayoutObjectResponse> layoutObjects) {
         return new HallResponse(h.getId(), h.getName(), h.getAddress(), h.getCapacity(),
                 h.isSeated(), h.getNumRows(), h.getNumColumns(), h.getNumberingScheme(),
-                h.getLayoutWidth(), h.getLayoutHeight(), seats);
+                h.getLayoutWidth(), h.getLayoutHeight(), seats, layoutObjects);
     }
 }

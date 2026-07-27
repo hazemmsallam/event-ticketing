@@ -6,6 +6,7 @@ import com.eventticketing.catalog.domain.EventStatus;
 import com.eventticketing.catalog.domain.Hall;
 import com.eventticketing.catalog.domain.Seat;
 import com.eventticketing.catalog.domain.SeatType;
+import com.eventticketing.catalog.dto.LayoutObjectResponse;
 import com.eventticketing.catalog.repository.EventRepository;
 import com.eventticketing.catalog.repository.SeatRepository;
 import com.eventticketing.common.exception.BusinessRuleException;
@@ -584,8 +585,13 @@ public class ReservationService {
                     seat.getSectionName(), priceByType.get(seat.getSeatType()), status));
         }
 
+        List<LayoutObjectResponse> layoutObjects = hall.getLayoutObjects().stream()
+                .map(LayoutObjectResponse::from)
+                .toList();
+
         return new EventSeatMapResponse(eventId, hall.getId(), hall.getName(), true,
-                hall.getLayoutWidth(), hall.getLayoutHeight(), seats.size(), available, reserved, booked, items);
+                hall.getLayoutWidth(), hall.getLayoutHeight(), seats.size(), available, reserved, booked,
+                items, layoutObjects);
     }
 
     private Map<Long, SeatAvailabilityStatus> resolveActiveSeatStatuses(Long eventId, Instant now) {
