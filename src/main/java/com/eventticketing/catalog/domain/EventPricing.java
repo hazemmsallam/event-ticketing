@@ -30,16 +30,29 @@ public class EventPricing extends BaseEntity {
     @JoinColumn(name = "event_id", nullable = false)
     private Event event;
 
-    /** Null means general admission (non-seated hall). */
+    /** Null means general admission (non-seated hall). Legacy — prefer {@link #section}. */
     @Enumerated(EnumType.STRING)
     @Column(name = "seat_type", length = 16)
     private SeatType seatType;
+
+    /**
+     * The section this price applies to (per-event override of the section's default price). When
+     * set, this is the authoritative source for that section's seats / general-admission tickets.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "section_id")
+    private Section section;
 
     @Column(name = "price", nullable = false, precision = 12, scale = 2)
     private BigDecimal price;
 
     public EventPricing(SeatType seatType, BigDecimal price) {
         this.seatType = seatType;
+        this.price = price;
+    }
+
+    public EventPricing(Section section, BigDecimal price) {
+        this.section = section;
         this.price = price;
     }
 }

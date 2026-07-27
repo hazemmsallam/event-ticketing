@@ -24,6 +24,11 @@ public record EventSeatMapResponse(
          * Non-bookable layout objects (tables, …) so the customer 3D view can render the physical
          * layout. These carry geometry only — no availability or price — and cannot be selected.
          */
-        List<LayoutObjectResponse> layoutObjects
+        List<LayoutObjectResponse> layoutObjects,
+        /**
+         * The hall's sections with live availability and geometry. Seated sections contain the
+         * seats above; general-admission sections are selected as a whole with a quantity.
+         */
+        List<SectionAvailabilityResponse> sections
 ) {
 }

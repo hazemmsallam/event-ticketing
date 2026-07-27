@@ -1,6 +1,7 @@
 package com.eventticketing.reservation.domain;
 
 import com.eventticketing.catalog.domain.Event;
+import com.eventticketing.catalog.domain.Section;
 import com.eventticketing.common.domain.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -44,6 +45,14 @@ public class Booking extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private BookingStatus status;
 
+    /**
+     * For a general-admission booking, the section its tickets belong to (drives per-section
+     * capacity). Null for a seated booking, whose seats carry their own sections.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "section_id")
+    private Section section;
+
     /** Number of seats (seated) or admission tickets (general admission). */
     @Column(name = "quantity", nullable = false)
     private int quantity;
@@ -63,9 +72,18 @@ public class Booking extends BaseEntity {
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BookingSeat> bookingSeats = new ArrayList<>();
 
+    /** Tickets generated once payment confirms the booking (one per seat / per GA quantity). */
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Ticket> tickets = new ArrayList<>();
+
     public void addBookingSeat(BookingSeat seat) {
         seat.setBooking(this);
         this.bookingSeats.add(seat);
+    }
+
+    public void addTicket(Ticket ticket) {
+        ticket.setBooking(this);
+        this.tickets.add(ticket);
     }
 
     public boolean isExpired(Instant now) {

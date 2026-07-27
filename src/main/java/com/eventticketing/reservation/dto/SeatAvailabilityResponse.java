@@ -22,6 +22,7 @@ public record SeatAvailabilityResponse(
         Integer layoutWidth,
         Integer layoutHeight,
         String sectionName,
+        Long sectionId,
         BigDecimal price,
         SeatAvailabilityStatus status
 ) {

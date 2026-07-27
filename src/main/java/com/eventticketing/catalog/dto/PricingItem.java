@@ -11,6 +11,8 @@ import java.math.BigDecimal;
  */
 public record PricingItem(
         SeatType seatType,
+        /** Preferred: the section this price applies to. */
+        Long sectionId,
         @NotNull @DecimalMin(value = "0.0", inclusive = true) BigDecimal price
 ) {
 }

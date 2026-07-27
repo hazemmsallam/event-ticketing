@@ -14,6 +14,8 @@ public record CreateBookingRequest(
         @NotNull Long eventId,
         @NotBlank String customerRef,
         List<Long> seatIds,
+        /** For a general-admission section booking: the section to buy tickets in. */
+        Long sectionId,
         Integer quantity
 ) {
 }

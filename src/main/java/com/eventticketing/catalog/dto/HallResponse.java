@@ -17,12 +17,14 @@ public record HallResponse(
         Integer layoutWidth,
         Integer layoutHeight,
         List<SeatResponse> seats,
-        List<LayoutObjectResponse> layoutObjects
+        List<LayoutObjectResponse> layoutObjects,
+        List<SectionResponse> sections
 ) {
     public static HallResponse from(Hall h, List<SeatResponse> seats,
-                                    List<LayoutObjectResponse> layoutObjects) {
+                                    List<LayoutObjectResponse> layoutObjects,
+                                    List<SectionResponse> sections) {
         return new HallResponse(h.getId(), h.getName(), h.getAddress(), h.getCapacity(),
                 h.isSeated(), h.getNumRows(), h.getNumColumns(), h.getNumberingScheme(),
-                h.getLayoutWidth(), h.getLayoutHeight(), seats, layoutObjects);
+                h.getLayoutWidth(), h.getLayoutHeight(), seats, layoutObjects, sections);
     }
 }

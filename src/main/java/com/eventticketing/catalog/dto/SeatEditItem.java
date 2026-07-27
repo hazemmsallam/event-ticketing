@@ -18,7 +18,8 @@ public record SeatEditItem(
         @NotBlank String rowLabel,
         @NotNull @Min(1) Integer rowIndex,
         @NotNull @Min(1) Integer seatNumber,
-        @NotNull SeatType seatType,
+        /** Legacy seat category; optional now that a seat's price comes from its section. */
+        SeatType seatType,
         @NotNull @Min(0) Integer layoutX,
         @NotNull @Min(0) Integer layoutY,
         @NotNull @Min(-180) @Max(180) Integer rotationDegrees,

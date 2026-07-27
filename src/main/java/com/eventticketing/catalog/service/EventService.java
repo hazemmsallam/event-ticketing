@@ -6,6 +6,7 @@ import com.eventticketing.catalog.domain.EventStatus;
 import com.eventticketing.catalog.domain.Hall;
 import com.eventticketing.catalog.domain.Organizer;
 import com.eventticketing.catalog.domain.SeatType;
+import com.eventticketing.catalog.domain.Section;
 import com.eventticketing.catalog.dto.CreateEventRequest;
 import com.eventticketing.catalog.dto.EventResponse;
 import com.eventticketing.catalog.dto.EventSummaryResponse;
@@ -21,7 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class EventService {
@@ -110,14 +114,37 @@ public class EventService {
     public EventResponse setPricing(Long eventId, SetEventPricingRequest request) {
         Event event = getEntity(eventId);
         Hall hall = event.getHall();
+        event.clearPricing();
 
+        if (!hall.getSections().isEmpty()) {
+            // Section-keyed pricing: each line prices one of the hall's sections. Dynamic names —
+            // no VIP/PREMIUM/REGULAR logic anywhere.
+            Map<Long, Section> byId = hall.getSections().stream()
+                    .collect(Collectors.toMap(Section::getId, Function.identity()));
+            Set<Long> seen = new HashSet<>();
+            for (PricingItem item : request.prices()) {
+                if (item.sectionId() == null) {
+                    throw new BusinessRuleException("Each price line must reference a sectionId.");
+                }
+                Section section = byId.get(item.sectionId());
+                if (section == null) {
+                    throw new BusinessRuleException(
+                            "Section %d does not belong to hall '%s'.".formatted(item.sectionId(), hall.getName()));
+                }
+                if (!seen.add(item.sectionId())) {
+                    throw new BusinessRuleException("Duplicate price for section '" + section.getName() + "'.");
+                }
+                event.addPricing(new EventPricing(section, item.price()));
+            }
+            return toResponse(event);
+        }
+
+        // Legacy fallback: halls without sections still price by seat type / general admission.
         if (hall.isSeated()) {
             validateSeatedPricing(hall, request.prices());
         } else {
             validateGeneralAdmissionPricing(request.prices());
         }
-
-        event.clearPricing();
         for (PricingItem item : request.prices()) {
             event.addPricing(new EventPricing(item.seatType(), item.price()));
         }
@@ -168,6 +195,24 @@ public class EventService {
 
     private void requirePricingComplete(Event event) {
         Hall hall = event.getHall();
+
+        if (!hall.getSections().isEmpty()) {
+            // Each section must be priced — either an event override or the section's default price.
+            Set<Long> pricedSections = event.getPricing().stream()
+                    .filter(p -> p.getSection() != null)
+                    .map(p -> p.getSection().getId())
+                    .collect(Collectors.toSet());
+            for (Section section : hall.getSections()) {
+                boolean priced = pricedSections.contains(section.getId())
+                        || section.getDefaultPrice() != null;
+                if (!priced) {
+                    throw new BusinessRuleException(
+                            "Cannot publish: missing price for section '" + section.getName() + "'.");
+                }
+            }
+            return;
+        }
+
         Set<SeatType> priced = new HashSet<>();
         boolean hasGeneralAdmission = false;
         for (EventPricing p : event.getPricing()) {

@@ -75,9 +75,9 @@ public class DemoDataSeeder implements CommandLineRunner {
                 base, base.plus(3, ChronoUnit.HOURS),
                 organizerId, grandTheatre.id(), grandTheatre.capacity())).id();
         eventService.setPricing(concertId, new SetEventPricingRequest(List.of(
-                new PricingItem(SeatType.VIP, new BigDecimal("200.00")),
-                new PricingItem(SeatType.PREMIUM, new BigDecimal("120.00")),
-                new PricingItem(SeatType.REGULAR, new BigDecimal("60.00"))
+                new PricingItem(SeatType.VIP, null, new BigDecimal("200.00")),
+                new PricingItem(SeatType.PREMIUM, null, new BigDecimal("120.00")),
+                new PricingItem(SeatType.REGULAR, null, new BigDecimal("60.00"))
         )));
         eventService.updateStatus(concertId, EventStatus.PUBLISHED);
 
@@ -86,7 +86,7 @@ public class DemoDataSeeder implements CommandLineRunner {
                 base.plus(1, ChronoUnit.DAYS), base.plus(1, ChronoUnit.DAYS).plus(8, ChronoUnit.HOURS),
                 organizerId, openArena.id(), 300)).id();
         eventService.setPricing(festivalId, new SetEventPricingRequest(List.of(
-                new PricingItem(null, new BigDecimal("50.00"))
+                new PricingItem(null, null, new BigDecimal("50.00"))
         )));
         eventService.updateStatus(festivalId, EventStatus.PUBLISHED);
 

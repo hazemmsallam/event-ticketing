@@ -6,9 +6,14 @@ import com.eventticketing.catalog.domain.EventStatus;
 import com.eventticketing.catalog.domain.Hall;
 import com.eventticketing.catalog.domain.Seat;
 import com.eventticketing.catalog.domain.SeatType;
+import com.eventticketing.catalog.domain.Section;
+import com.eventticketing.catalog.domain.SectionBookingMode;
 import com.eventticketing.catalog.dto.LayoutObjectResponse;
+import com.eventticketing.catalog.dto.PointItem;
 import com.eventticketing.catalog.repository.EventRepository;
 import com.eventticketing.catalog.repository.SeatRepository;
+import com.eventticketing.catalog.repository.SectionRepository;
+import com.eventticketing.catalog.service.SectionGeometry;
 import com.eventticketing.common.exception.BusinessRuleException;
 import com.eventticketing.common.exception.ConflictException;
 import com.eventticketing.common.exception.ResourceNotFoundException;
@@ -22,15 +27,19 @@ import com.eventticketing.reservation.domain.BookingStatus;
 import com.eventticketing.reservation.domain.Payment;
 import com.eventticketing.reservation.domain.PaymentStatus;
 import com.eventticketing.reservation.domain.SeatAvailabilityStatus;
+import com.eventticketing.reservation.domain.Ticket;
 import com.eventticketing.reservation.dto.BookingResponse;
 import com.eventticketing.reservation.dto.CreateBookingRequest;
 import com.eventticketing.reservation.dto.EventAvailabilityResponse;
 import com.eventticketing.reservation.dto.EventSeatMapResponse;
 import com.eventticketing.reservation.dto.PaymentResponse;
 import com.eventticketing.reservation.dto.SeatAvailabilityResponse;
+import com.eventticketing.reservation.dto.SectionAvailabilityResponse;
 import com.eventticketing.reservation.repository.BookingRepository;
 import com.eventticketing.reservation.repository.BookingSeatRepository;
 import com.eventticketing.reservation.repository.PaymentRepository;
+import com.eventticketing.reservation.repository.TicketRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.Cache;
@@ -66,26 +75,35 @@ public class ReservationService {
     private final PaymentRepository paymentRepository;
     private final EventRepository eventRepository;
     private final SeatRepository seatRepository;
+    private final SectionRepository sectionRepository;
+    private final TicketRepository ticketRepository;
     private final ReservationProperties properties;
     private final Clock clock;
     private final CacheManager cacheManager;
+    private final ObjectMapper objectMapper;
 
     public ReservationService(BookingRepository bookingRepository,
                               BookingSeatRepository bookingSeatRepository,
                               PaymentRepository paymentRepository,
                               EventRepository eventRepository,
                               SeatRepository seatRepository,
+                              SectionRepository sectionRepository,
+                              TicketRepository ticketRepository,
                               ReservationProperties properties,
                               Clock clock,
-                              CacheManager cacheManager) {
+                              CacheManager cacheManager,
+                              ObjectMapper objectMapper) {
         this.bookingRepository = bookingRepository;
         this.bookingSeatRepository = bookingSeatRepository;
         this.paymentRepository = paymentRepository;
         this.eventRepository = eventRepository;
         this.seatRepository = seatRepository;
+        this.sectionRepository = sectionRepository;
+        this.ticketRepository = ticketRepository;
         this.properties = properties;
         this.clock = clock;
         this.cacheManager = cacheManager;
+        this.objectMapper = objectMapper;
     }
 
     // ------------------------------------------------------------------ booking
@@ -101,9 +119,19 @@ public class ReservationService {
                     "Event is not open for booking (status " + event.getStatus() + ").");
         }
 
-        return event.getHall().isSeated()
-                ? bookSeats(event, request, now)
-                : bookGeneralAdmission(event, request, now);
+        // Route by the request, not the hall: a hall may mix seated and general-admission sections.
+        if (request.seatIds() != null && !request.seatIds().isEmpty()) {
+            return bookSeats(event, request, now);
+        }
+        if (request.sectionId() != null) {
+            return bookGeneralAdmissionSection(event, request, now);
+        }
+        // Legacy: a non-seated hall without sections books against the event's overall capacity.
+        if (!event.getHall().isSeated()) {
+            return bookGeneralAdmission(event, request, now);
+        }
+        throw new BusinessRuleException(
+                "Provide seatIds (seated) or a sectionId with quantity (general admission).");
     }
 
     private BookingResponse bookSeats(Event event, CreateBookingRequest request, Instant now) {
@@ -155,15 +183,12 @@ public class ReservationService {
         Booking booking = newBooking(event, request.customerRef(), seats.size(), now);
         BigDecimal total = BigDecimal.ZERO;
         for (Seat seat : seats) {
-            BigDecimal price = priceByType.get(seat.getSeatType());
-            if (price == null) {
-                throw new BusinessRuleException(
-                        "No price configured for seat type " + seat.getSeatType() + ".");
-            }
+            BigDecimal price = seatPrice(event, seat, priceByType);
             BookingSeat bookingSeat = new BookingSeat();
             bookingSeat.setEvent(event);
             bookingSeat.setSeat(seat);
             bookingSeat.setSeatType(seat.getSeatType());
+            applySectionSnapshot(bookingSeat, seat.getSection());
             bookingSeat.setPrice(price);
             bookingSeat.setStatus(BookingSeatStatus.HELD);
             booking.addBookingSeat(bookingSeat);
@@ -215,6 +240,61 @@ public class ReservationService {
         booking.setTotalAmount(price.multiply(BigDecimal.valueOf(quantity)));
         bookingRepository.save(booking);
         evictAfterCommit(locked.getId());
+        return BookingResponse.from(booking);
+    }
+
+    /**
+     * Books tickets in a general-admission section, enforcing that section's own capacity
+     * (independent of any seated sections in the same hall). Availability =
+     * {@code capacity - confirmed - reserved} for that section.
+     */
+    private BookingResponse bookGeneralAdmissionSection(Event event, CreateBookingRequest request, Instant now) {
+        Integer quantity = request.quantity();
+        if (quantity == null || quantity < 1) {
+            throw new BusinessRuleException("A general-admission booking requires a quantity of at least 1.");
+        }
+        int max = properties.maxSeatsPerBooking();
+        if (quantity > max) {
+            throw new BusinessRuleException("You can book at most " + max + " tickets per booking.");
+        }
+
+        Section section = sectionRepository.findById(request.sectionId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Section", request.sectionId()));
+        if (!section.getHall().getId().equals(event.getHall().getId())) {
+            throw new BusinessRuleException("That section does not belong to this event's hall.");
+        }
+        if (section.getBookingMode() != SectionBookingMode.GENERAL_ADMISSION) {
+            throw new BusinessRuleException(
+                    "Section '" + section.getName() + "' is seated; pick individual seats instead.");
+        }
+        if (section.getCapacity() == null) {
+            throw new BusinessRuleException("Section '" + section.getName() + "' has no configured capacity.");
+        }
+
+        // Serialize capacity checks for this event so the section cannot be oversold.
+        eventRepository.findByIdForUpdate(event.getId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Event", event.getId()));
+        releaseExpiredForEvent(event.getId(), now);
+        bookingRepository.flush();
+
+        long confirmed = bookingRepository.sumConfirmedQuantityBySection(section.getId());
+        long reserved = bookingRepository.sumReservedQuantityBySection(section.getId(), now);
+        long available = section.getCapacity() - (confirmed + reserved);
+        if (quantity > available) {
+            throw new ConflictException("Not enough capacity in '" + section.getName()
+                    + "': only " + Math.max(available, 0) + " left.");
+        }
+
+        BigDecimal price = resolveSectionPrice(event, section);
+        if (price == null) {
+            throw new BusinessRuleException("No price configured for section '" + section.getName() + "'.");
+        }
+
+        Booking booking = newBooking(event, request.customerRef(), quantity, now);
+        booking.setSection(section);
+        booking.setTotalAmount(price.multiply(BigDecimal.valueOf(quantity)));
+        bookingRepository.save(booking);
+        evictAfterCommit(event.getId());
         return BookingResponse.from(booking);
     }
 
@@ -314,8 +394,51 @@ public class ReservationService {
                 seat.setStatus(BookingSeatStatus.BOOKED);
             }
         }
+        generateTickets(booking);
         maybeMarkSoldOut(booking.getEvent());
         evictAfterCommit(booking.getEvent().getId());
+    }
+
+    /**
+     * Generates the admission tickets for a just-confirmed booking: one per booked seat (seated) or
+     * one per purchased quantity (general admission). Idempotent — a booking that already has
+     * tickets is left untouched.
+     */
+    private void generateTickets(Booking booking) {
+        if (!booking.getTickets().isEmpty()) {
+            return;
+        }
+        Long eventId = booking.getEvent().getId();
+        int seq = 1;
+        List<BookingSeat> booked = booking.getBookingSeats().stream()
+                .filter(bs -> bs.getStatus() == BookingSeatStatus.BOOKED)
+                .toList();
+        if (!booked.isEmpty()) {
+            for (BookingSeat bs : booked) {
+                Ticket ticket = new Ticket();
+                ticket.setEventId(eventId);
+                ticket.setSeatId(bs.getSeat().getId());
+                ticket.setSeatLabel(bs.getSeat().getLabel());
+                ticket.setSectionId(bs.getSectionId());
+                ticket.setSectionName(bs.getSectionName());
+                ticket.setTicketNumber(ticketNumber(booking.getId(), seq++));
+                booking.addTicket(ticket);
+            }
+        } else {
+            Section section = booking.getSection();
+            for (int i = 0; i < booking.getQuantity(); i++) {
+                Ticket ticket = new Ticket();
+                ticket.setEventId(eventId);
+                ticket.setSectionId(section != null ? section.getId() : null);
+                ticket.setSectionName(section != null ? section.getName() : null);
+                ticket.setTicketNumber(ticketNumber(booking.getId(), seq++));
+                booking.addTicket(ticket);
+            }
+        }
+    }
+
+    private String ticketNumber(Long bookingId, int seq) {
+        return "TKT-%d-%03d".formatted(bookingId, seq);
     }
 
     private PaymentResponse paymentResponse(Booking booking, boolean success, String message) {
@@ -468,14 +591,12 @@ public class ReservationService {
             }
             Map<SeatType, BigDecimal> priceByType = pricingByType(event);
             for (Seat seat : seats) {
-                BigDecimal price = priceByType.get(seat.getSeatType());
-                if (price == null) {
-                    throw new BusinessRuleException("No price configured for seat type " + seat.getSeatType() + ".");
-                }
+                BigDecimal price = seatPrice(event, seat, priceByType);
                 BookingSeat bookingSeat = new BookingSeat();
                 bookingSeat.setEvent(event);
                 bookingSeat.setSeat(seat);
                 bookingSeat.setSeatType(seat.getSeatType());
+                applySectionSnapshot(bookingSeat, seat.getSection());
                 bookingSeat.setPrice(price);
                 bookingSeat.setStatus(BookingSeatStatus.HELD);
                 booking.addBookingSeat(bookingSeat);
@@ -556,42 +677,66 @@ public class ReservationService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Event", eventId));
         Hall hall = event.getHall();
-        if (!hall.isSeated()) {
-            throw new BusinessRuleException(
-                    "This event is general admission; use the availability endpoint instead.");
-        }
 
         Map<SeatType, BigDecimal> priceByType = pricingByType(event);
         List<Seat> seats = seatRepository.findByHallIdOrderByRowIndexAscSeatNumberAsc(hall.getId());
-        Map<Long, SeatAvailabilityStatus> statusBySeat =
-                resolveActiveSeatStatuses(eventId, now);
+        Map<Long, SeatAvailabilityStatus> statusBySeat = resolveActiveSeatStatuses(eventId, now);
 
         List<SeatAvailabilityResponse> items = new ArrayList<>(seats.size());
+        // Per-section seated tallies, keyed by section id, for deriving section availability.
+        Map<Long, long[]> seatedTally = new java.util.HashMap<>(); // [available, reserved, booked]
         long available = 0;
         long reserved = 0;
         long booked = 0;
         for (Seat seat : seats) {
             SeatAvailabilityStatus status =
                     statusBySeat.getOrDefault(seat.getId(), SeatAvailabilityStatus.AVAILABLE);
+            Long sectionId = seat.getSection() != null ? seat.getSection().getId() : null;
+            long[] tally = sectionId == null ? null
+                    : seatedTally.computeIfAbsent(sectionId, k -> new long[3]);
             switch (status) {
-                case AVAILABLE -> available++;
-                case RESERVED -> reserved++;
-                case BOOKED -> booked++;
+                case AVAILABLE -> { available++; if (tally != null) tally[0]++; }
+                case RESERVED -> { reserved++; if (tally != null) tally[1]++; }
+                case BOOKED -> { booked++; if (tally != null) tally[2]++; }
             }
             items.add(new SeatAvailabilityResponse(
                     seat.getId(), seat.getLabel(), seat.getRowLabel(), seat.getRowIndex(),
                     seat.getSeatNumber(), seat.getSeatType(), seat.getLayoutX(), seat.getLayoutY(),
                     seat.getRotationDegrees(), seat.getLayoutWidth(), seat.getLayoutHeight(),
-                    seat.getSectionName(), priceByType.get(seat.getSeatType()), status));
+                    seat.getSectionName(), sectionId, seatPriceOrNull(event, seat, priceByType), status));
         }
 
         List<LayoutObjectResponse> layoutObjects = hall.getLayoutObjects().stream()
                 .map(LayoutObjectResponse::from)
                 .toList();
 
-        return new EventSeatMapResponse(eventId, hall.getId(), hall.getName(), true,
+        List<SectionAvailabilityResponse> sections = hall.getSections().stream()
+                .map(section -> sectionAvailability(event, section, seatedTally, now))
+                .toList();
+
+        return new EventSeatMapResponse(eventId, hall.getId(), hall.getName(), hall.isSeated(),
                 hall.getLayoutWidth(), hall.getLayoutHeight(), seats.size(), available, reserved, booked,
-                items, layoutObjects);
+                items, layoutObjects, sections);
+    }
+
+    private SectionAvailabilityResponse sectionAvailability(Event event, Section section,
+                                                            Map<Long, long[]> seatedTally, Instant now) {
+        BigDecimal price = resolveSectionPrice(event, section);
+        List<PointItem> points = SectionGeometry.fromJson(objectMapper, section.getPoints());
+        if (section.getBookingMode() == SectionBookingMode.GENERAL_ADMISSION) {
+            int capacity = section.getCapacity() != null ? section.getCapacity() : 0;
+            long confirmed = bookingRepository.sumConfirmedQuantityBySection(section.getId());
+            long held = bookingRepository.sumReservedQuantityBySection(section.getId(), now);
+            long free = Math.max(0, capacity - (confirmed + held));
+            return new SectionAvailabilityResponse(section.getId(), section.getName(),
+                    section.getBookingMode(), price, section.getCurrency(), capacity, free, held,
+                    confirmed, section.getShapeKind(), points, section.getColor());
+        }
+        long[] tally = seatedTally.getOrDefault(section.getId(), new long[3]);
+        int capacity = (int) (tally[0] + tally[1] + tally[2]);
+        return new SectionAvailabilityResponse(section.getId(), section.getName(),
+                section.getBookingMode(), price, section.getCurrency(), capacity, tally[0], tally[1],
+                tally[2], section.getShapeKind(), points, section.getColor());
     }
 
     private Map<Long, SeatAvailabilityStatus> resolveActiveSeatStatuses(Long eventId, Instant now) {
@@ -652,6 +797,55 @@ public class ReservationService {
             }
         }
         return map;
+    }
+
+    /**
+     * Resolves the price for a seat: the event's per-section override, else the section's default
+     * price, else (legacy) the per-seat-type price. Throws if none is configured.
+     */
+    private BigDecimal seatPrice(Event event, Seat seat, Map<SeatType, BigDecimal> priceByType) {
+        BigDecimal sectionPrice = resolveSectionPrice(event, seat.getSection());
+        if (sectionPrice != null) {
+            return sectionPrice;
+        }
+        BigDecimal typePrice = seat.getSeatType() != null ? priceByType.get(seat.getSeatType()) : null;
+        if (typePrice != null) {
+            return typePrice;
+        }
+        String where = seat.getSection() != null ? "section '" + seat.getSection().getName() + "'"
+                : "seat type " + seat.getSeatType();
+        throw new BusinessRuleException("No price configured for " + where + ".");
+    }
+
+    /** Non-throwing price resolution for reads (browsing an unpriced event must not fail). */
+    private BigDecimal seatPriceOrNull(Event event, Seat seat, Map<SeatType, BigDecimal> priceByType) {
+        BigDecimal sectionPrice = resolveSectionPrice(event, seat.getSection());
+        if (sectionPrice != null) {
+            return sectionPrice;
+        }
+        return seat.getSeatType() != null ? priceByType.get(seat.getSeatType()) : null;
+    }
+
+    /** Event override price for a section, falling back to the section's default price. */
+    private BigDecimal resolveSectionPrice(Event event, Section section) {
+        if (section == null) {
+            return null;
+        }
+        for (EventPricing p : event.getPricing()) {
+            if (p.getSection() != null && p.getSection().getId().equals(section.getId())) {
+                return p.getPrice();
+            }
+        }
+        return section.getDefaultPrice();
+    }
+
+    private void applySectionSnapshot(BookingSeat bookingSeat, Section section) {
+        if (section == null) {
+            return;
+        }
+        bookingSeat.setSectionId(section.getId());
+        bookingSeat.setSectionName(section.getName());
+        bookingSeat.setCurrency(section.getCurrency());
     }
 
     private BigDecimal generalAdmissionPrice(Event event) {

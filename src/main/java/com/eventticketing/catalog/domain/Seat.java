@@ -47,6 +47,15 @@ public class Seat extends BaseEntity {
     @Column(name = "seat_type", nullable = false, length = 16)
     private SeatType seatType;
 
+    /**
+     * The section this seat belongs to. Nullable for backward compatibility, but every seat in a
+     * hall managed through the section editor is assigned one; its price/name/currency come from
+     * the section (see the reservation service's price resolution).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "section_id")
+    private Section section;
+
     @Column(name = "layout_x")
     private Integer layoutX;
 
