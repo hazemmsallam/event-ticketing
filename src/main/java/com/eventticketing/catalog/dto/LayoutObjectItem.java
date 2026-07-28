@@ -13,13 +13,15 @@ import jakarta.validation.constraints.NotNull;
  *
  * <p>Shape-specific dimensions map onto the footprint as: square → {@code layoutWidth} ==
  * {@code layoutDepth} (size); rectangle → {@code layoutWidth} (width) and {@code layoutDepth}
- * (length); circle → {@code layoutWidth} == {@code layoutDepth} (diameter).
+ * (length); circle → {@code layoutWidth} == {@code layoutDepth} (diameter); triangle and curve →
+ * {@code layoutWidth} and {@code layoutDepth} are the independent sides of the bounding box the
+ * footprint is inscribed in.
  */
 public record LayoutObjectItem(
         Long id,
         /** Defaults to {@link LayoutObjectType#TABLE} when omitted. */
         LayoutObjectType objectType,
-        /** Required when the object is a TABLE. */
+        /** Required for tables and screens; screens must use RECTANGLE. */
         TableShape shape,
         String label,
         @NotNull @Min(0) Integer layoutX,

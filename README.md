@@ -42,7 +42,7 @@ its own repo that drives the `web.admin` endpoints.)
 |-----------------|-------|
 | `Organizer`     | Owns events. |
 | `Hall`          | `seated` flag. Seated halls have `numRows` × `numColumns`; seats are generated on creation. Non-seated halls have a `capacity`. |
-| `Seat`          | Belongs to a hall; carries a `SeatType` (VIP / PREMIUM / REGULAR) and a label like `A1`. |
+| `Seat`          | Belongs to a hall and section; carries a label like `A1` plus its spatial layout. |
 | `Event`         | Runs in one hall; has a lifecycle status and a `maxCapacity`. |
 | `EventPricing`  | Price **per seat type, per event** (a null seat type = the general-admission price). |
 | `Booking`       | An order in status `PENDING_PAYMENT → CONFIRMED / EXPIRED / CANCELLED`. |

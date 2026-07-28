@@ -5,7 +5,6 @@ import com.eventticketing.catalog.domain.EventPricing;
 import com.eventticketing.catalog.domain.EventStatus;
 import com.eventticketing.catalog.domain.Hall;
 import com.eventticketing.catalog.domain.Seat;
-import com.eventticketing.catalog.domain.SeatType;
 import com.eventticketing.catalog.domain.Section;
 import com.eventticketing.catalog.domain.SectionBookingMode;
 import com.eventticketing.catalog.dto.LayoutObjectResponse;
@@ -55,7 +54,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -178,16 +176,13 @@ public class ReservationService {
             throw new ConflictException("These seats are already reserved or booked: " + taken + ".");
         }
 
-        Map<SeatType, BigDecimal> priceByType = pricingByType(event);
-
         Booking booking = newBooking(event, request.customerRef(), seats.size(), now);
         BigDecimal total = BigDecimal.ZERO;
         for (Seat seat : seats) {
-            BigDecimal price = seatPrice(event, seat, priceByType);
+            BigDecimal price = seatPrice(event, seat);
             BookingSeat bookingSeat = new BookingSeat();
             bookingSeat.setEvent(event);
             bookingSeat.setSeat(seat);
-            bookingSeat.setSeatType(seat.getSeatType());
             applySectionSnapshot(bookingSeat, seat.getSection());
             bookingSeat.setPrice(price);
             bookingSeat.setStatus(BookingSeatStatus.HELD);
@@ -589,13 +584,11 @@ public class ReservationService {
                         .collect(Collectors.joining(", "));
                 throw new ConflictException("These seats are already reserved or booked: " + taken + ".");
             }
-            Map<SeatType, BigDecimal> priceByType = pricingByType(event);
             for (Seat seat : seats) {
-                BigDecimal price = seatPrice(event, seat, priceByType);
+                BigDecimal price = seatPrice(event, seat);
                 BookingSeat bookingSeat = new BookingSeat();
                 bookingSeat.setEvent(event);
                 bookingSeat.setSeat(seat);
-                bookingSeat.setSeatType(seat.getSeatType());
                 applySectionSnapshot(bookingSeat, seat.getSection());
                 bookingSeat.setPrice(price);
                 bookingSeat.setStatus(BookingSeatStatus.HELD);
@@ -678,7 +671,6 @@ public class ReservationService {
                 .orElseThrow(() -> ResourceNotFoundException.of("Event", eventId));
         Hall hall = event.getHall();
 
-        Map<SeatType, BigDecimal> priceByType = pricingByType(event);
         List<Seat> seats = seatRepository.findByHallIdOrderByRowIndexAscSeatNumberAsc(hall.getId());
         Map<Long, SeatAvailabilityStatus> statusBySeat = resolveActiveSeatStatuses(eventId, now);
 
@@ -701,9 +693,9 @@ public class ReservationService {
             }
             items.add(new SeatAvailabilityResponse(
                     seat.getId(), seat.getLabel(), seat.getRowLabel(), seat.getRowIndex(),
-                    seat.getSeatNumber(), seat.getSeatType(), seat.getLayoutX(), seat.getLayoutY(),
+                    seat.getSeatNumber(), seat.getLayoutX(), seat.getLayoutY(),
                     seat.getRotationDegrees(), seat.getLayoutWidth(), seat.getLayoutHeight(),
-                    seat.getSectionName(), sectionId, seatPriceOrNull(event, seat, priceByType), status));
+                    seat.getSectionName(), sectionId, seatPriceOrNull(event, seat), status));
         }
 
         List<LayoutObjectResponse> layoutObjects = hall.getLayoutObjects().stream()
@@ -789,44 +781,32 @@ public class ReservationService {
                 .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
     }
 
-    private Map<SeatType, BigDecimal> pricingByType(Event event) {
-        Map<SeatType, BigDecimal> map = new EnumMap<>(SeatType.class);
-        for (EventPricing pricing : event.getPricing()) {
-            if (pricing.getSeatType() != null) {
-                map.put(pricing.getSeatType(), pricing.getPrice());
-            }
-        }
-        return map;
-    }
-
     /**
-     * Resolves the price for a seat: the event's per-section override, else the section's default
-     * price, else (legacy) the per-seat-type price. Throws if none is configured.
+     * Resolves the price for a seat from its section. Every bookable seat must belong to one.
      */
-    private BigDecimal seatPrice(Event event, Seat seat, Map<SeatType, BigDecimal> priceByType) {
+    private BigDecimal seatPrice(Event event, Seat seat) {
+        if (seat.getSection() == null) {
+            throw new BusinessRuleException(
+                    "Seat '" + seat.getLabel() + "' is not assigned to a section.");
+        }
         BigDecimal sectionPrice = resolveSectionPrice(event, seat.getSection());
         if (sectionPrice != null) {
             return sectionPrice;
         }
-        BigDecimal typePrice = seat.getSeatType() != null ? priceByType.get(seat.getSeatType()) : null;
-        if (typePrice != null) {
-            return typePrice;
-        }
-        String where = seat.getSection() != null ? "section '" + seat.getSection().getName() + "'"
-                : "seat type " + seat.getSeatType();
-        throw new BusinessRuleException("No price configured for " + where + ".");
+        throw new BusinessRuleException(
+                "No price configured for section '" + seat.getSection().getName() + "'.");
     }
 
     /** Non-throwing price resolution for reads (browsing an unpriced event must not fail). */
-    private BigDecimal seatPriceOrNull(Event event, Seat seat, Map<SeatType, BigDecimal> priceByType) {
-        BigDecimal sectionPrice = resolveSectionPrice(event, seat.getSection());
-        if (sectionPrice != null) {
-            return sectionPrice;
-        }
-        return seat.getSeatType() != null ? priceByType.get(seat.getSeatType()) : null;
+    private BigDecimal seatPriceOrNull(Event event, Seat seat) {
+        return resolveSectionPrice(event, seat.getSection());
     }
 
-    /** Event override price for a section, falling back to the section's default price. */
+    /**
+     * The event's price for a section. Prices belong to the event, never to the hall, so an event
+     * that has no price line for a section simply has no price for it (publishing is what enforces
+     * that every section is priced).
+     */
     private BigDecimal resolveSectionPrice(Event event, Section section) {
         if (section == null) {
             return null;
@@ -836,7 +816,7 @@ public class ReservationService {
                 return p.getPrice();
             }
         }
-        return section.getDefaultPrice();
+        return null;
     }
 
     private void applySectionSnapshot(BookingSeat bookingSeat, Section section) {
@@ -849,9 +829,10 @@ public class ReservationService {
     }
 
     private BigDecimal generalAdmissionPrice(Event event) {
-        return event.getPricing().stream()
-                .filter(p -> p.getSeatType() == null)
-                .map(EventPricing::getPrice)
+        return event.getHall().getSections().stream()
+                .filter(section -> section.getBookingMode() == SectionBookingMode.GENERAL_ADMISSION)
+                .map(section -> resolveSectionPrice(event, section))
+                .filter(price -> price != null)
                 .findFirst()
                 .orElse(null);
     }

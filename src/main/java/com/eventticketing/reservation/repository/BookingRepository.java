@@ -8,11 +8,23 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByStatusAndExpiresAtBefore(BookingStatus status, Instant time);
+
+    /**
+     * Ids of the given sections that already carry general-admission bookings. Such a section
+     * cannot be deleted: its bookings are real sales, and {@code booking.section_id} references it.
+     */
+    @Query("""
+            select distinct b.section.id
+            from Booking b
+            where b.section.id in :sectionIds
+            """)
+    List<Long> findBookedSectionIds(@Param("sectionIds") Collection<Long> sectionIds);
 
     List<Booking> findByEventIdAndStatusAndExpiresAtBefore(Long eventId, BookingStatus status, Instant time);
 

@@ -1,13 +1,11 @@
 package com.eventticketing.demo;
 
 import com.eventticketing.catalog.domain.EventStatus;
-import com.eventticketing.catalog.domain.SeatType;
 import com.eventticketing.catalog.dto.CreateEventRequest;
 import com.eventticketing.catalog.dto.CreateHallRequest;
 import com.eventticketing.catalog.dto.CreateOrganizerRequest;
 import com.eventticketing.catalog.dto.HallResponse;
 import com.eventticketing.catalog.dto.PricingItem;
-import com.eventticketing.catalog.dto.RowTypeRange;
 import com.eventticketing.catalog.dto.SetEventPricingRequest;
 import com.eventticketing.catalog.service.EventService;
 import com.eventticketing.catalog.service.HallService;
@@ -55,18 +53,13 @@ public class DemoDataSeeder implements CommandLineRunner {
         Long organizerId = organizerService.create(
                 new CreateOrganizerRequest("Starlight Productions", "hello@starlight.example", "+1-555-0100")).id();
 
-        // Seated hall: 5 rows x 8 columns. Row 1 = VIP, rows 2-3 = PREMIUM, rows 4-5 = REGULAR.
+        // Seated hall: 5 rows x 8 columns in one default section.
         HallResponse grandTheatre = hallService.create(new CreateHallRequest(
-                "Grand Theatre", "10 Opera Ave", true, 5, 8, null,
-                List.of(
-                        new RowTypeRange(1, 1, SeatType.VIP),
-                        new RowTypeRange(2, 3, SeatType.PREMIUM),
-                        new RowTypeRange(4, 5, SeatType.REGULAR)
-                ), null));
+                "Grand Theatre", "10 Opera Ave", true, 5, 8, null, null));
 
         // Non-seated hall: general admission, capacity 300.
         HallResponse openArena = hallService.create(new CreateHallRequest(
-                "Open Arena", "200 Festival Rd", false, null, null, null, null, 300));
+                "Open Arena", "200 Festival Rd", false, null, null, null, 300));
 
         Instant base = Instant.now().plus(7, ChronoUnit.DAYS);
 
@@ -75,9 +68,7 @@ public class DemoDataSeeder implements CommandLineRunner {
                 base, base.plus(3, ChronoUnit.HOURS),
                 organizerId, grandTheatre.id(), grandTheatre.capacity())).id();
         eventService.setPricing(concertId, new SetEventPricingRequest(List.of(
-                new PricingItem(SeatType.VIP, null, new BigDecimal("200.00")),
-                new PricingItem(SeatType.PREMIUM, null, new BigDecimal("120.00")),
-                new PricingItem(SeatType.REGULAR, null, new BigDecimal("60.00"))
+                new PricingItem(grandTheatre.sections().get(0).id(), new BigDecimal("100.00"))
         )));
         eventService.updateStatus(concertId, EventStatus.PUBLISHED);
 
@@ -86,7 +77,7 @@ public class DemoDataSeeder implements CommandLineRunner {
                 base.plus(1, ChronoUnit.DAYS), base.plus(1, ChronoUnit.DAYS).plus(8, ChronoUnit.HOURS),
                 organizerId, openArena.id(), 300)).id();
         eventService.setPricing(festivalId, new SetEventPricingRequest(List.of(
-                new PricingItem(null, null, new BigDecimal("50.00"))
+                new PricingItem(openArena.sections().get(0).id(), new BigDecimal("50.00"))
         )));
         eventService.updateStatus(festivalId, EventStatus.PUBLISHED);
 

@@ -12,7 +12,7 @@ Content-Type: application/json
 
 { "name": "Starlight Productions", "email": "hello@starlight.example", "phone": "+1-555-0100" }
 
-### Create a SEATED hall (5 rows x 8 cols; row 1 VIP, rows 2-3 PREMIUM, rows 4-5 REGULAR)
+### Create a SEATED hall (5 rows x 8 cols in a default section)
 POST {{host}}/api/halls
 Content-Type: application/json
 
@@ -21,12 +21,7 @@ Content-Type: application/json
   "address": "10 Opera Ave",
   "seated": true,
   "numRows": 5,
-  "numColumns": 8,
-  "rowTypes": [
-    { "fromRow": 1, "toRow": 1, "seatType": "VIP" },
-    { "fromRow": 2, "toRow": 3, "seatType": "PREMIUM" },
-    { "fromRow": 4, "toRow": 5, "seatType": "REGULAR" }
-  ]
+  "numColumns": 8
 }
 
 ### Create a NON-SEATED (general admission) hall
@@ -53,15 +48,13 @@ Content-Type: application/json
   "maxCapacity": 40
 }
 
-### Set per-seat-type pricing for the seated event
+### Set section pricing for the seated event (use the section id returned with the hall)
 PUT {{host}}/api/events/1/pricing
 Content-Type: application/json
 
 {
   "prices": [
-    { "seatType": "VIP", "price": 200.00 },
-    { "seatType": "PREMIUM", "price": 120.00 },
-    { "seatType": "REGULAR", "price": 60.00 }
+    { "sectionId": 1, "price": 100.00 }
   ]
 }
 

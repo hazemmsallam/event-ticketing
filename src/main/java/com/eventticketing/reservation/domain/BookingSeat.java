@@ -2,7 +2,6 @@ package com.eventticketing.reservation.domain;
 
 import com.eventticketing.catalog.domain.Event;
 import com.eventticketing.catalog.domain.Seat;
-import com.eventticketing.catalog.domain.SeatType;
 import com.eventticketing.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -46,10 +45,6 @@ public class BookingSeat extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "seat_id", nullable = false)
     private Seat seat;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "seat_type", length = 16)
-    private SeatType seatType;
 
     /** Snapshot of the seat's section at hold time (id + name), insulated from later edits. */
     @Column(name = "section_id")

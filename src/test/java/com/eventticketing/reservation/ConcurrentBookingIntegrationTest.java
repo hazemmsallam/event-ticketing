@@ -7,7 +7,6 @@ import com.eventticketing.catalog.dto.HallResponse;
 import com.eventticketing.catalog.dto.PricingItem;
 import com.eventticketing.catalog.dto.SetEventPricingRequest;
 import com.eventticketing.catalog.domain.EventStatus;
-import com.eventticketing.catalog.domain.SeatType;
 import com.eventticketing.catalog.service.EventService;
 import com.eventticketing.catalog.service.HallService;
 import com.eventticketing.catalog.service.OrganizerService;
@@ -67,7 +66,7 @@ class ConcurrentBookingIntegrationTest {
                 new CreateOrganizerRequest("Acme Events", "acme@example.com", "+100")).id();
 
         HallResponse hall = hallService.create(new CreateHallRequest(
-                "Small Hall", "1 Main St", true, 1, 1, null, List.of(), null));
+                "Small Hall", "1 Main St", true, 1, 1, null, null));
         Long hallId = hall.id();
         Long seatId = hall.seats().get(0).id();
 
@@ -76,7 +75,8 @@ class ConcurrentBookingIntegrationTest {
                 "Gala", "desc", "Music", start, start.plus(2, ChronoUnit.HOURS),
                 organizerId, hallId, 1)).id();
         eventService.setPricing(eventId,
-                new SetEventPricingRequest(List.of(new PricingItem(SeatType.REGULAR, null, new BigDecimal("100.00")))));
+                new SetEventPricingRequest(List.of(
+                        new PricingItem(hall.sections().get(0).id(), new BigDecimal("100.00")))));
         eventService.updateStatus(eventId, EventStatus.PUBLISHED);
 
         int threads = 8;
@@ -120,14 +120,15 @@ class ConcurrentBookingIntegrationTest {
                 new CreateOrganizerRequest("History Events", "history@example.com", "+101")).id();
 
         HallResponse hall = hallService.create(new CreateHallRequest(
-                "History Arena", "2 Main St", false, null, null, null, List.of(), 10));
+                "History Arena", "2 Main St", false, null, null, null, 10));
 
         Instant start = Instant.now().plus(2, ChronoUnit.DAYS);
         Long eventId = eventService.create(new CreateEventRequest(
                 "History Show", "desc", "Music", start, start.plus(2, ChronoUnit.HOURS),
                 organizerId, hall.id(), 10)).id();
         eventService.setPricing(eventId,
-                new SetEventPricingRequest(List.of(new PricingItem(null, null, new BigDecimal("25.00")))));
+                new SetEventPricingRequest(List.of(
+                        new PricingItem(hall.sections().get(0).id(), new BigDecimal("25.00")))));
         eventService.updateStatus(eventId, EventStatus.PUBLISHED);
 
         BookingResponse first = reservationService.createBooking(

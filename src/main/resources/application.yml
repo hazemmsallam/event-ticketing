@@ -9,7 +9,7 @@ spring:
   jpa:
     hibernate:
       # Flyway is the single source of truth for the schema; Hibernate never alters it.
-      ddl-auto: none
+      ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
@@ -27,7 +27,7 @@ spring:
 
 app:
   # Set to true to load a small predefined catalog on startup (see DemoDataSeeder).
-  seed-demo-data: ${SEED_DEMO_DATA:false}
+  seed-demo-data: ${SEED_DEMO_DATA:true}
   reservation:
     # ISO-8601 duration. How long a seat stays HELD before auto-release if unpaid.
     hold-duration: PT10M
@@ -44,7 +44,7 @@ app:
     reconcile-after: PT1M
 
 server:
-  port: ${SERVER_PORT:8089}
+  port: ${SERVER_PORT:8082}
 
 logging:
   level:

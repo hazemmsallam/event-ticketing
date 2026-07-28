@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(java -version)",
+      "Bash(cd \"C:/Users/GIGABYTE/Desktop/event-ticketing\"; ls target/classes >/dev/null 2>&1 && echo \"HAS_TARGET_CLASSES\" || echo \"NO_TARGET\"; find \"$HOME/.m2/repository/org/junit\" -name \"junit-jupiter-api-*.jar\" 2>/dev/null | head -1; find \"$HOME/.m2/repository/org/junit/platform\" -name \"junit-platform-console-standalone-*.jar\" 2>/dev/null | head -1)",
+      "Bash(cd \"C:/Users/GIGABYTE/Desktop/admin\" && ls -la && echo \"=== package.json ===\" && cat package.json 2>/dev/null | head -40)",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(python \"C:/Users/GIGABYTE/AppData/Local/Temp/claude/C--Users-GIGABYTE-Desktop-event-ticketing/e8e048bb-0c9e-4318-b16d-0d46e4072597/scratchpad/jsbalance.py\" \"C:/Users/GIGABYTE/Desktop/admin/src/main/resources/static/js/section-layout.js\")",
+      "Bash(python C:/Users/GIGABYTE/AppData/Local/Temp/claude/C--Users-GIGABYTE-Desktop-event-ticketing/e8e048bb-0c9e-4318-b16d-0d46e4072597/scratchpad/jsbalance.py C:/Users/GIGABYTE/Desktop/admin/src/main/resources/static/js/section-layout.js)",
+      "Bash(python C:/Users/GIGABYTE/AppData/Local/Temp/claude/C--Users-GIGABYTE-Desktop-event-ticketing/e8e048bb-0c9e-4318-b16d-0d46e4072597/scratchpad/jsbalance.py C:/Users/GIGABYTE/Desktop/admin/src/main/resources/static/js/seat-layout.js)",
+      "Bash(grep -n \"function setMode\\\\|btnMode\\\\|var tools =\\\\|function notify\\\\|renderAll\\(\\); *$\\\\|notify\\(\\);\\\\|hall-seat-editor-ready\\\\|HallSeatEditor.subscribe\\\\|function selectGroup\\\\|function setSelection\\\\|renderAll\\(\\);\\\\s*notify\" src/main/resources/static/js/section-layout.js)",
+      "Bash(python -c ' *)",
+      "Bash(python -)",
+      "Bash(:)",
+      "Read(//c/Users/GIGABYTE/.m2/repository/**)",
+      "Bash(mkdir -p _out)",
+      "Bash(javac -nowarn -proc:full -cp 'target/classes;__TRACKED_VAR__' -d _out src/main/java/com/eventticketing/catalog/domain/LayoutPreset.java src/main/java/com/eventticketing/catalog/dto/PresetMembers.java src/main/java/com/eventticketing/catalog/dto/PresetSectionItem.java src/main/java/com/eventticketing/catalog/dto/PresetSeatItem.java src/main/java/com/eventticketing/catalog/dto/PresetTableItem.java src/main/java/com/eventticketing/catalog/dto/CreateLayoutPresetRequest.java src/main/java/com/eventticketing/catalog/dto/LayoutPresetResponse.java src/main/java/com/eventticketing/catalog/dto/LayoutPresetSummaryResponse.java src/main/java/com/eventticketing/catalog/repository/LayoutPresetRepository.java src/main/java/com/eventticketing/catalog/service/LayoutPresetService.java src/main/java/com/eventticketing/web/admin/LayoutPresetController.java)",
+      "Bash(echo \"EXIT: $?\")",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files/Eclipse Adoptium/**)",
+      "Read(//c/Users/GIGABYTE/**)",
+      "Bash(find 'C:\\\\Users\\\\GIGABYTE/.m2/repository/org/projectlombok' -name *.jar)",
+      "Bash(grep -v \":0$\")",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(command -v mysql)",
+      "Bash(mysql --version)",
+      "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot event_ticketing -N -e ' *)",
+      "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot event_ticketing -e ' *)",
+      "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot event_ticketing)",
+      "Bash(echo \"prefix exit: $?\")",
+      "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot -N -e ' *)"
+    ]
+  }
+}

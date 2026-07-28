@@ -1,18 +1,17 @@
 package com.eventticketing.catalog.dto;
 
-import com.eventticketing.catalog.domain.SeatType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
 
 /**
- * A single price line. {@code seatType} is null for general-admission (non-seated) events.
+ * A price override for one hall section.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record PricingItem(
-        SeatType seatType,
-        /** Preferred: the section this price applies to. */
-        Long sectionId,
+        @NotNull Long sectionId,
         @NotNull @DecimalMin(value = "0.0", inclusive = true) BigDecimal price
 ) {
 }

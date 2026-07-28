@@ -1,7 +1,6 @@
 package com.eventticketing.catalog.dto;
 
 import com.eventticketing.catalog.domain.Seat;
-import com.eventticketing.catalog.domain.SeatType;
 
 public record SeatResponse(
         Long id,
@@ -9,7 +8,6 @@ public record SeatResponse(
         String rowLabel,
         int rowIndex,
         int seatNumber,
-        SeatType seatType,
         Integer layoutX,
         Integer layoutY,
         Integer rotationDegrees,
@@ -20,7 +18,7 @@ public record SeatResponse(
 ) {
     public static SeatResponse from(Seat s) {
         return new SeatResponse(s.getId(), s.getLabel(), s.getRowLabel(), s.getRowIndex(),
-                s.getSeatNumber(), s.getSeatType(), s.getLayoutX(), s.getLayoutY(),
+                s.getSeatNumber(), s.getLayoutX(), s.getLayoutY(),
                 s.getRotationDegrees(), s.getLayoutWidth(), s.getLayoutHeight(), s.getSectionName(),
                 s.getSection() != null ? s.getSection().getId() : null);
     }

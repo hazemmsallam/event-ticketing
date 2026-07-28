@@ -13,6 +13,8 @@ public enum SectionShape {
     CIRCLE,
     ELLIPSE,
     TRIANGLE,
+    /** A curved band (half-ring / crescent), e.g. a balcony sweep wrapping a stage. */
+    CURVE,
     POLYGON,
     FREEFORM
 }

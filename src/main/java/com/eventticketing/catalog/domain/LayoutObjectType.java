@@ -11,5 +11,7 @@ package com.eventticketing.catalog.domain;
  */
 public enum LayoutObjectType {
     /** A physical table: visualisation only, never bookable and never counted toward capacity. */
-    TABLE
+    TABLE,
+    /** A TV, projection screen or display panel: visualisation only and never bookable. */
+    SCREEN
 }

@@ -3,8 +3,6 @@ package com.eventticketing.catalog.domain;
 import com.eventticketing.common.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -43,14 +41,9 @@ public class Seat extends BaseEntity {
     @Column(name = "label", nullable = false, length = 16)
     private String label;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "seat_type", nullable = false, length = 16)
-    private SeatType seatType;
-
     /**
-     * The section this seat belongs to. Nullable for backward compatibility, but every seat in a
-     * hall managed through the section editor is assigned one; its price/name/currency come from
-     * the section (see the reservation service's price resolution).
+     * The section this seat belongs to. Draft hall layouts may temporarily leave this null, but a
+     * seated event cannot be published until every seat belongs to a seated section.
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "section_id")

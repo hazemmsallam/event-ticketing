@@ -1,10 +1,11 @@
 package com.eventticketing.catalog.dto;
 
-import com.eventticketing.catalog.domain.SeatType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record SeatLayoutItem(
         @NotNull Long id,
         @NotNull @Min(0) Integer layoutX,
@@ -12,8 +13,6 @@ public record SeatLayoutItem(
         @NotNull @Min(-180) @Max(180) Integer rotationDegrees,
         @NotNull @Min(12) @Max(120) Integer layoutWidth,
         @NotNull @Min(12) @Max(120) Integer layoutHeight,
-        String sectionName,
-        /** Optional: when present, reclassifies the seat (VIP / PREMIUM / REGULAR). */
-        SeatType seatType
+        String sectionName
 ) {
 }

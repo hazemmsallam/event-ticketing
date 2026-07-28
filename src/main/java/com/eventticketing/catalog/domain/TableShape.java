@@ -8,10 +8,14 @@ package com.eventticketing.catalog.domain;
  *   <li>{@link #SQUARE} — a single size drives both footprint sides (width == length).</li>
  *   <li>{@link #RECTANGLE} — independent width and length.</li>
  *   <li>{@link #CIRCLE} — a diameter drives the bounding box (width == length == diameter).</li>
+ *   <li>{@link #TRIANGLE} — a triangular footprint inscribed in the width×length bounding box.</li>
+ *   <li>{@link #CURVE} — a curved (crescent) footprint inscribed in the width×length box.</li>
  * </ul>
  */
 public enum TableShape {
     SQUARE,
     RECTANGLE,
-    CIRCLE
+    CIRCLE,
+    TRIANGLE,
+    CURVE
 }

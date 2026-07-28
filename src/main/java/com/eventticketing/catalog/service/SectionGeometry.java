@@ -61,4 +61,18 @@ public final class SectionGeometry {
         }
         return inside;
     }
+
+    /** Absolute polygon area in layout pixels, used to prefer a specific nested section. */
+    public static double area(List<PointItem> polygon) {
+        if (polygon == null || polygon.size() < 3) {
+            return Double.POSITIVE_INFINITY;
+        }
+        double sum = 0;
+        for (int i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+            PointItem current = polygon.get(i);
+            PointItem previous = polygon.get(j);
+            sum += previous.x() * current.y() - current.x() * previous.y();
+        }
+        return Math.abs(sum / 2.0);
+    }
 }

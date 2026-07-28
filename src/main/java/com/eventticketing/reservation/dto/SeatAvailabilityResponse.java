@@ -1,13 +1,11 @@
 package com.eventticketing.reservation.dto;
 
-import com.eventticketing.catalog.domain.SeatType;
 import com.eventticketing.reservation.domain.SeatAvailabilityStatus;
 
 import java.math.BigDecimal;
 
 /**
- * One seat on the live seat map: its identity, type, price for this event, and current
- * availability status (AVAILABLE / RESERVED / BOOKED).
+ * One seat on the live seat map: identity, section, event price and availability.
  */
 public record SeatAvailabilityResponse(
         Long seatId,
@@ -15,7 +13,6 @@ public record SeatAvailabilityResponse(
         String rowLabel,
         int rowIndex,
         int seatNumber,
-        SeatType seatType,
         Integer layoutX,
         Integer layoutY,
         Integer rotationDegrees,

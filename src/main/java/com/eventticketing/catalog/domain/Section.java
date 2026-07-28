@@ -16,12 +16,16 @@ import lombok.Setter;
 import java.math.BigDecimal;
 
 /**
- * A first-class area of a hall with its own name, price, booking mode, capacity and boundary
- * geometry — not merely a label placed over seats.
+ * A first-class area of a hall with its own name, booking mode, capacity and boundary geometry —
+ * not merely a label placed over seats.
  *
- * <p>Names and prices are fully dynamic (any text, any amount): the business can create "Royal",
- * "Balcony Left", "Family Zone", etc. without any code change. There are deliberately no fixed
- * VIP/PREMIUM/REGULAR categories here. A hall may mix {@link SectionBookingMode#SEATED} sections
+ * <p>A section deliberately carries <em>no</em> price: the hall describes the venue, and the same
+ * area is worth different amounts at different events. Prices live only on
+ * {@link com.eventticketing.catalog.domain.EventPricing}, one line per (event, section).
+ *
+ * <p>Names are fully dynamic (any text): the business can create "Royal", "Balcony Left",
+ * "Family Zone", etc. without any code change. A hall may mix
+ * {@link SectionBookingMode#SEATED} sections
  * (containing selectable {@link Seat}s) and {@link SectionBookingMode#GENERAL_ADMISSION} sections
  * (open areas with an admin-set capacity) at the same time.
  *
@@ -47,10 +51,6 @@ public class Section extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "booking_mode", nullable = false, length = 24)
     private SectionBookingMode bookingMode;
-
-    /** Default/base ticket price for this section; an event may override it per section. */
-    @Column(name = "default_price", precision = 12, scale = 2)
-    private BigDecimal defaultPrice;
 
     /** ISO-ish currency label, e.g. "JOD". Stored per section (a venue property). */
     @Column(name = "currency", length = 8)

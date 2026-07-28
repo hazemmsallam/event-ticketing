@@ -39,7 +39,7 @@ public class LayoutObject extends BaseEntity {
     @Column(name = "object_type", nullable = false, length = 24)
     private LayoutObjectType objectType;
 
-    /** Footprint shape; required for {@link LayoutObjectType#TABLE}, may be null for future types. */
+    /** Footprint shape. Screens use a rectangular footprint. */
     @Enumerated(EnumType.STRING)
     @Column(name = "shape", length = 16)
     private TableShape shape;
@@ -66,11 +66,11 @@ public class LayoutObject extends BaseEntity {
     @Column(name = "layout_width")
     private Integer layoutWidth;
 
-    /** Footprint depth/length (Y). Equals the width for square and circular tables. */
+    /** Footprint depth/length (Y). For screens this is the panel thickness in the plan view. */
     @Column(name = "layout_depth")
     private Integer layoutDepth;
 
-    /** Physical (vertical) height of the object. */
+    /** Physical vertical height. For screens this is the display-panel height. */
     @Column(name = "object_height")
     private Integer objectHeight;
 }
