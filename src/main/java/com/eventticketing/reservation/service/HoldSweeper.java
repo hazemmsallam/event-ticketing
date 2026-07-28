@@ -21,11 +21,22 @@ public class HoldSweeper {
         this.reservationService = reservationService;
     }
 
+    /** Safety valve: stop after this many batches so one tick can never run unbounded. */
+    private static final int MAX_BATCHES_PER_RUN = 20;
+
     @Scheduled(fixedDelayString = "${app.reservation.sweep-interval}")
     public void sweep() {
-        int released = reservationService.releaseExpired();
-        if (released > 0) {
-            log.info("Released {} expired booking hold(s).", released);
+        int total = 0;
+        for (int batch = 0; batch < MAX_BATCHES_PER_RUN; batch++) {
+            int released = reservationService.releaseExpired();
+            total += released;
+            // A short batch means the backlog is drained; stop rather than spin.
+            if (!reservationService.isFullSweepBatch(released)) {
+                break;
+            }
+        }
+        if (total > 0) {
+            log.info("Released {} expired booking hold(s).", total);
         }
     }
 }

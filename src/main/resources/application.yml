@@ -9,7 +9,11 @@ spring:
   jpa:
     hibernate:
       # Flyway is the single source of truth for the schema; Hibernate never alters it.
-      ddl-auto: update
+      # MUST stay `validate` (or `none`): with `update`/`create` Hibernate silently recreates
+      # tables from the entities, which drops the things it cannot see — notably the generated
+      # `active_lock` column and its UNIQUE index, i.e. the entire double-booking guard.
+      # `validate` fails startup loudly on drift instead of running without the constraint.
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:

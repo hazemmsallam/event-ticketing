@@ -45,6 +45,7 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -153,7 +154,7 @@ public class ReservationService {
         releaseExpiredForEvent(event.getId(), now);
         bookingRepository.flush();
 
-        List<Seat> seats = seatRepository.findAllById(seatIds);
+        List<Seat> seats = sortedById(seatRepository.findAllById(seatIds));
         if (seats.size() != seatIds.size()) {
             throw new ResourceNotFoundException("One or more requested seats do not exist.");
         }
@@ -266,9 +267,11 @@ public class ReservationService {
             throw new BusinessRuleException("Section '" + section.getName() + "' has no configured capacity.");
         }
 
-        // Serialize capacity checks for this event so the section cannot be oversold.
-        eventRepository.findByIdForUpdate(event.getId())
-                .orElseThrow(() -> ResourceNotFoundException.of("Event", event.getId()));
+        // Serialise capacity checks for THIS SECTION only. Capacity is a section property, so
+        // locking the section instead of the event lets other sections of the same event sell in
+        // parallel; previously every general-admission sale for an event queued on one row.
+        sectionRepository.findByIdForUpdate(section.getId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Section", section.getId()));
         releaseExpiredForEvent(event.getId(), now);
         bookingRepository.flush();
 
@@ -291,6 +294,17 @@ public class ReservationService {
         bookingRepository.save(booking);
         evictAfterCommit(event.getId());
         return BookingResponse.from(booking);
+    }
+
+    /**
+     * Orders seats by id so every transaction inserts its holds in the same sequence. Two requests
+     * for overlapping seat sets would otherwise take index locks in opposite orders and deadlock;
+     * a global ordering makes one of them simply wait, then lose cleanly on the unique index.
+     */
+    private List<Seat> sortedById(List<Seat> seats) {
+        return seats.stream()
+                .sorted(java.util.Comparator.comparing(Seat::getId))
+                .toList();
     }
 
     private Booking newBooking(Event event, String customerRef, int quantity, Instant now) {
@@ -336,7 +350,15 @@ public class ReservationService {
         }
         payment.setStatus(PaymentStatus.INITIATED);
         payment.setFailureReason(null);
-        Payment saved = paymentRepository.save(payment);
+        Payment saved;
+        try {
+            saved = paymentRepository.saveAndFlush(payment);
+        } catch (DataIntegrityViolationException ex) {
+            // Two concurrent pay() calls both saw "no payment yet"; the unique booking_id index
+            // let exactly one through. Report the loser as a conflict rather than a 500 — the
+            // winner's charge is already in flight under the same idempotency key.
+            throw new ConflictException("A payment for this booking is already being processed.");
+        }
 
         return new PaymentContext(saved.getId(), bookingId, booking.getCustomerRef(),
                 booking.getTotalAmount(), saved.getIdempotencyKey());
@@ -562,7 +584,7 @@ public class ReservationService {
         Set<Long> toAdd = new LinkedHashSet<>(requested);
         toAdd.removeAll(currentSeatIds);
         if (!toAdd.isEmpty()) {
-            List<Seat> seats = seatRepository.findAllById(toAdd);
+            List<Seat> seats = sortedById(seatRepository.findAllById(toAdd));
             if (seats.size() != toAdd.size()) {
                 throw new ResourceNotFoundException("One or more requested seats do not exist.");
             }
@@ -621,13 +643,28 @@ public class ReservationService {
     // ------------------------------------------------------------------ expiry
 
     /** Releases every expired pending hold system-wide. Invoked by the scheduled sweeper. */
+    /** How many expired holds one sweeper transaction will release. */
+    private static final int SWEEP_BATCH_SIZE = 200;
+
+    /**
+     * Releases one bounded batch of expired holds. Bounded on purpose: an expiry wave after a
+     * flash sale could otherwise pull every stale booking into a single transaction, holding row
+     * locks across thousands of updates. The caller loops until a batch comes back short.
+     *
+     * @return the number released; a full batch means more remain
+     */
     @Transactional
     public int releaseExpired() {
         Instant now = clock.instant();
-        List<Booking> expired =
-                bookingRepository.findByStatusAndExpiresAtBefore(BookingStatus.PENDING_PAYMENT, now);
+        List<Booking> expired = bookingRepository.findByStatusAndExpiresAtBeforeOrderByExpiresAtAsc(
+                BookingStatus.PENDING_PAYMENT, now, PageRequest.of(0, SWEEP_BATCH_SIZE));
         expired.forEach(this::expire);
         return expired.size();
+    }
+
+    /** True when a batch was full, i.e. {@link #releaseExpired()} should be called again. */
+    public boolean isFullSweepBatch(int released) {
+        return released >= SWEEP_BATCH_SIZE;
     }
 
     private void releaseExpiredForEvent(Long eventId, Instant now) {

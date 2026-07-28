@@ -29,7 +29,10 @@
       "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot event_ticketing -e ' *)",
       "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot event_ticketing)",
       "Bash(echo \"prefix exit: $?\")",
-      "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot -N -e ' *)"
+      "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot -N -e ' *)",
+      "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot -e 'DROP DATABASE IF EXISTS event_ticketing; CREATE DATABASE event_ticketing;')",
+      "Bash(sed -n '/CREATE TABLE hall/,/ENGINE/p' src/main/resources/db/migration/V1__catalog_schema.sql)",
+      "Bash(sed -n '/CREATE TABLE event \\(/,/ENGINE/p' src/main/resources/db/migration/V1__catalog_schema.sql)"
     ]
   }
 }
