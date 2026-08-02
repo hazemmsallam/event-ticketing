@@ -12,6 +12,8 @@ import java.time.Duration;
  * @param sweepInterval       how often the background sweeper releases expired holds
  * @param cacheTtl            how long availability/seat-map reads are cached in Redis
  * @param reconcileAfter      how long a payment may stay in-doubt before reconciliation acts
+ * @param unpaidHoldLimit     how many holds a customer may open without paying, per window
+ * @param unpaidHoldWindow    the window over which unpaid holds are counted
  */
 @ConfigurationProperties(prefix = "app.reservation")
 public record ReservationProperties(
@@ -19,6 +21,8 @@ public record ReservationProperties(
         int maxSeatsPerBooking,
         Duration sweepInterval,
         Duration cacheTtl,
-        Duration reconcileAfter
+        Duration reconcileAfter,
+        int unpaidHoldLimit,
+        Duration unpaidHoldWindow
 ) {
 }

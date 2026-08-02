@@ -13,8 +13,15 @@ public enum SectionShape {
     CIRCLE,
     ELLIPSE,
     TRIANGLE,
+    PENTAGON,
+    HEXAGON,
     /** A curved band (half-ring / crescent), e.g. a balcony sweep wrapping a stage. */
     CURVE,
+    /**
+     * Any other point set: a regular n-gon from the editor's sides control, a star produced by
+     * folding edges inward, or a boundary whose edges were removed. Concave rings are fine —
+     * containment is ray-cast, which is winding- and convexity-agnostic.
+     */
     POLYGON,
     FREEFORM
 }

@@ -54,11 +54,30 @@ public final class ShapePoints {
                     new PointItem(cx, y),
                     new PointItem(x + width, y + height),
                     new PointItem(x, y + height));
+            case PENTAGON -> regularPolygon(cx, cy, width / 2.0, height / 2.0, 5);
+            case HEXAGON -> regularPolygon(cx, cy, width / 2.0, height / 2.0, 6);
             case CIRCLE, ELLIPSE -> ellipse(cx, cy, width / 2.0, height / 2.0);
             case CURVE -> curveBand(cx, y, width, height);
             case POLYGON, FREEFORM -> List.of();
         };
         return rotate(raw, cx, cy, rotationDegrees);
+    }
+
+    /**
+     * A regular n-gon inscribed in the box, first vertex pointing straight up so a pentagon or
+     * hexagon reads the way people draw one. Shared by every straight-sided preset, so adding an
+     * octagon later is one line rather than a new algorithm.
+     */
+    public static List<PointItem> regularPolygon(double cx, double cy, double rx, double ry, int sides) {
+        if (sides < 3) {
+            return List.of();
+        }
+        List<PointItem> pts = new ArrayList<>(sides);
+        for (int i = 0; i < sides; i++) {
+            double angle = -Math.PI / 2 + 2.0 * Math.PI * i / sides;
+            pts.add(new PointItem(cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)));
+        }
+        return pts;
     }
 
     /** An ellipse outline (a circle when the two radii are equal) traced counter-clockwise. */

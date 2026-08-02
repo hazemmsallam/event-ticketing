@@ -1,0 +1,938 @@
+<title>Event Ticketing — System Architecture</title>
+
+<style>
+  :root {
+    color-scheme: light;
+    --paper:      #EFF2F5;
+    --surface:    #FFFFFF;
+    --sheet:      #F7F9FB;
+    --ink:        #16202B;
+    --ink-2:      #4A5C6E;
+    --ink-3:      #6E8095;
+    --rule:       #C7D2DC;
+    --rule-soft:  #DDE5EC;
+    --accent:     #A85D00;
+    --accent-bg:  #F7EAD8;
+    --good:       #1B6E4B;
+    --crit:       #A32B22;
+    --crit-bg:    #F7E4E2;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", Menlo, Consolas, monospace;
+    --measure: 72ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --paper: #0D131A; --surface: #141D26; --sheet: #EEF2F5;
+      --ink: #E3EAF1; --ink-2: #9BAABA; --ink-3: #7A8B9C;
+      --rule: #25323E; --rule-soft: #1D2833;
+      --accent: #E8A44B; --accent-bg: #2A2115;
+      --good: #55B27E; --crit: #E8776B; --crit-bg: #2B1B19;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0D131A; --surface: #141D26; --sheet: #EEF2F5;
+    --ink: #E3EAF1; --ink-2: #9BAABA; --ink-3: #7A8B9C;
+    --rule: #25323E; --rule-soft: #1D2833;
+    --accent: #E8A44B; --accent-bg: #2A2115;
+    --good: #55B27E; --crit: #E8776B; --crit-bg: #2B1B19;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --paper: #EFF2F5; --surface: #FFFFFF; --sheet: #F7F9FB;
+    --ink: #16202B; --ink-2: #4A5C6E; --ink-3: #6E8095;
+    --rule: #C7D2DC; --rule-soft: #DDE5EC;
+    --accent: #A85D00; --accent-bg: #F7EAD8;
+    --good: #1B6E4B; --crit: #A32B22; --crit-bg: #F7E4E2;
+  }
+
+  .doc { background: var(--paper); color: var(--ink); font-family: var(--sans);
+         font-size: 16px; line-height: 1.65; padding: 0 0 5rem; }
+  .doc *, .doc *::before, .doc *::after { box-sizing: border-box; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 1.5rem; }
+
+  .titleblock { border: 1px solid var(--rule); background: var(--surface);
+                margin: 2.5rem 0 3rem; display: grid; grid-template-columns: 1fr auto; }
+  .titleblock > div { padding: 1.5rem 1.75rem; }
+  .tb-main { border-right: 1px solid var(--rule); }
+  .eyebrow { font-family: var(--mono); font-size: .7rem; letter-spacing: .16em;
+             text-transform: uppercase; color: var(--accent); margin: 0 0 .6rem; }
+  .titleblock h1 { font-size: clamp(1.6rem, 3.4vw, 2.35rem); line-height: 1.15;
+                   letter-spacing: -.022em; margin: 0 0 .7rem; text-wrap: balance; font-weight: 620; }
+  .tb-sub { color: var(--ink-2); margin: 0; max-width: 58ch; }
+  .tb-meta { font-family: var(--mono); font-size: .74rem; line-height: 1.9;
+             color: var(--ink-2); white-space: nowrap; }
+  .tb-meta b { font-weight: 600; display: block; font-size: .66rem; letter-spacing: .12em;
+               text-transform: uppercase; color: var(--ink-3); }
+
+  .shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 3.5rem; align-items: start; }
+  .toc { position: sticky; top: 1.5rem; font-family: var(--mono); font-size: .76rem; }
+  .toc h2 { font-size: .66rem; letter-spacing: .14em; text-transform: uppercase;
+            color: var(--ink-3); margin: 0 0 .85rem; font-weight: 600; }
+  .toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .1rem; }
+  .toc a { display: flex; gap: .6rem; padding: .32rem .4rem; color: var(--ink-2);
+           text-decoration: none; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--accent); border-left-color: var(--accent); background: var(--rule-soft); }
+  .toc a .n { color: var(--ink-3); }
+
+  main { min-width: 0; }
+  section { margin: 0 0 3.5rem; scroll-margin-top: 1.5rem; }
+  h2.sec { display: flex; align-items: baseline; gap: .8rem; font-size: 1.32rem;
+           letter-spacing: -.015em; margin: 0 0 .3rem; padding-bottom: .7rem;
+           border-bottom: 1px solid var(--rule); text-wrap: balance; font-weight: 620; }
+  h2.sec .n { font-family: var(--mono); font-size: .82rem; color: var(--accent);
+              letter-spacing: .06em; flex: none; }
+  h3 { font-size: 1rem; margin: 2rem 0 .5rem; letter-spacing: -.01em; font-weight: 620; }
+  p, li { max-width: var(--measure); }
+  p { margin: .85rem 0; }
+  ul { padding-left: 1.15rem; margin: .85rem 0; }
+  li { margin: .3rem 0; }
+  strong { font-weight: 640; }
+  code { font-family: var(--mono); font-size: .855em; background: var(--rule-soft);
+         padding: .1em .38em; border-radius: 3px; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .note { border-left: 3px solid var(--accent); background: var(--accent-bg);
+          padding: .9rem 1.1rem; margin: 1.4rem 0; max-width: var(--measure); }
+  .note.warn { border-left-color: var(--crit); background: var(--crit-bg); }
+  .note p { margin: .35rem 0; }
+  .note .lbl { font-family: var(--mono); font-size: .68rem; letter-spacing: .13em;
+               text-transform: uppercase; color: var(--accent); display: block; margin-bottom: .35rem; }
+  .note.warn .lbl { color: var(--crit); }
+
+  figure.sheet { margin: 1.75rem 0; background: var(--sheet); border: 1px solid var(--rule);
+                 color-scheme: light; }
+  figure.sheet .body { overflow-x: auto; padding: 1.5rem; }
+  figure.sheet pre.mermaid { margin: 0; background: none; padding: 0; min-width: 520px; }
+  figure.sheet figcaption { font-family: var(--mono); font-size: .7rem; letter-spacing: .1em;
+                            text-transform: uppercase; color: #5A6B7C; padding: .65rem 1rem;
+                            border-top: 1px solid #D6DEE6; display: flex;
+                            justify-content: space-between; gap: 1rem; }
+  figure.sheet figcaption .id { color: #92693A; }
+
+  .tw { overflow-x: auto; margin: 1.4rem 0; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; min-width: 460px; }
+  th, td { text-align: left; padding: .6rem .85rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th { font-family: var(--mono); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+       color: var(--ink-3); font-weight: 600; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .yes { color: var(--good); font-weight: 640; }
+  .no  { color: var(--crit); font-weight: 640; }
+
+  pre.code { font-family: var(--mono); font-size: .8rem; line-height: 1.6; background: var(--surface);
+             border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+             padding: 1rem 1.15rem; overflow-x: auto; margin: 1.4rem 0; color: var(--ink); }
+  pre.code .c { color: var(--ink-3); }
+
+  .check { list-style: none; padding: 0; }
+  .check li { max-width: none; margin: 0; padding: .55rem 0 .55rem 1.9rem; position: relative;
+              border-bottom: 1px solid var(--rule-soft); }
+  .check li::before { content: "\2610"; position: absolute; left: 0; top: .5rem;
+                      font-family: var(--mono); color: var(--accent); font-size: 1rem; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; gap: 2rem; }
+    .toc { position: static; border-bottom: 1px solid var(--rule); padding-bottom: 1rem; }
+    .toc ol { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .titleblock { grid-template-columns: 1fr; }
+    .tb-main { border-right: none; border-bottom: 1px solid var(--rule); }
+  }
+  @media (prefers-reduced-motion: reduce) { .doc * { transition: none !important; } }
+</style>
+
+<div class="doc">
+<div class="wrap">
+
+  <header class="titleblock">
+    <div class="tb-main">
+      <p class="eyebrow">System Architecture</p>
+      <h1>Event Ticketing Platform</h1>
+      <p class="tb-sub">Two Spring Boot applications, one MySQL schema owned by Flyway, and a Redis
+        read cache. Covers the hall/section layout model, the three booking modes, and the concurrency
+        machinery that prevents overselling.</p>
+    </div>
+    <div class="tb-meta">
+      <b>Services</b>event-ticketing · admin
+      <b>Stack</b>Spring Boot 3.4 · MySQL 8 · Redis
+      <b>Schema</b>Flyway V1–V10
+      <b>Diagrams</b>6 · Mermaid
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="toc" aria-label="Section index">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s0"><span class="n">00</span> What this is</a></li>
+        <li><a href="#s1"><span class="n">01</span> System topology</a></li>
+        <li><a href="#s2"><span class="n">02</span> Domain model</a></li>
+        <li><a href="#s3"><span class="n">03</span> Booking modes</a></li>
+        <li><a href="#s4"><span class="n">04</span> Seat lifecycle</a></li>
+        <li><a href="#s5"><span class="n">05</span> Hold acquisition</a></li>
+        <li><a href="#s6"><span class="n">06</span> The guard</a></li>
+        <li><a href="#s7"><span class="n">07</span> Payment</a></li>
+        <li><a href="#s8"><span class="n">08</span> Expiry &amp; cleanup</a></li>
+        <li><a href="#s9"><span class="n">09</span> Caching</a></li>
+        <li><a href="#s10"><span class="n">10</span> Layout editor</a></li>
+        <li><a href="#s11"><span class="n">11</span> Operations</a></li>
+        <li><a href="#s12"><span class="n">12</span> Running many instances</a></li>
+        <li><a href="#s13"><span class="n">13</span> High-demand on-sales</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+    <section id="s0">
+      <h2 class="sec"><span class="n">00</span> What this is</h2>
+      <p>An event ticketing platform where a venue is modelled as a <strong>hall</strong> containing
+        freely-drawn <strong>sections</strong>, and each event sells that hall’s inventory at its own prices.
+        A single hall can mix reserved seating and standing-room capacity in the same room.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Application</th><th>Port</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">event-ticketing</td><td class="mono">8082</td><td>Core REST API — catalog, inventory, bookings, payments, tickets. Owns the database.</td></tr>
+            <tr><td class="mono">admin</td><td class="mono">8092</td><td>Thymeleaf back-office. Holds no database; calls the API over HTTP and renders the visual hall editor.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Design tenets</h3>
+      <ul>
+        <li><strong>The database is the arbiter of inventory.</strong> Service-layer checks exist to produce
+          friendly errors; a unique index is what actually prevents double-booking.</li>
+        <li><strong>Holds are leases.</strong> <code>expires_at</code> lives on the row and is evaluated on read.
+          The sweeper is a garbage collector, not the mechanism.</li>
+        <li><strong>No transaction spans a network call.</strong> Payment is two short transactions with the
+          gateway call in the gap.</li>
+        <li><strong>Prices belong to events, not venues.</strong> A hall describes a room; the same section is
+          worth different amounts at different events.</li>
+        <li><strong>Flyway owns the schema.</strong> Hibernate is <code>validate</code> only.</li>
+      </ul>
+    </section>
+
+    <section id="s1">
+      <h2 class="sec"><span class="n">01</span> System topology</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart TB
+    subgraph clients["Clients"]
+        MOB["Customer App"]
+        ADMUI["Admin Browser&lt;br/&gt;hall editor, 2D + 3D"]
+    end
+
+    subgraph adminapp["admin — Spring Boot :8092"]
+        THY["Thymeleaf Controllers&lt;br/&gt;HallController · EventController"]
+        TC["TicketingClient&lt;br/&gt;RestClient wrapper"]
+    end
+
+    subgraph api["event-ticketing — Spring Boot :8082"]
+        BROWSE["EventBrowseController&lt;br/&gt;/api/events"]
+        BOOK["BookingController&lt;br/&gt;/api/bookings"]
+        ADMAPI["Admin controllers&lt;br/&gt;/api/halls · /api/events · /api/layout-presets"]
+        RESSVC["ReservationService&lt;br/&gt;holds · swaps · availability"]
+        PAYSVC["PaymentService&lt;br/&gt;2-phase orchestration"]
+        HALLSVC["HallService · EventService"]
+    end
+
+    subgraph bg["Scheduled Workers"]
+        SWEEP["HoldSweeper&lt;br/&gt;every 30s, batched"]
+        RECON["PaymentReconciliationJob&lt;br/&gt;every 30s"]
+    end
+
+    subgraph infra["Infrastructure"]
+        REDIS[("Redis&lt;br/&gt;eventSeatMap · eventAvailability&lt;br/&gt;TTL 2s")]
+        DB[("MySQL 8&lt;br/&gt;Flyway V1–V10")]
+    end
+
+    GW["FakePaymentGateway&lt;br/&gt;PaymentGateway interface"]
+
+    MOB --> BROWSE & BOOK
+    ADMUI --> THY
+    THY --> TC
+    TC -->|HTTP| ADMAPI
+
+    BROWSE --> RESSVC
+    BOOK --> RESSVC
+    BOOK --> PAYSVC
+    ADMAPI --> HALLSVC
+
+    RESSVC -->|"@Cacheable"| REDIS
+    RESSVC -->|evict after commit| REDIS
+    RESSVC --> DB
+    HALLSVC --> DB
+    PAYSVC --> RESSVC
+    PAYSVC -->|outside txn| GW
+
+    SWEEP --> RESSVC
+    RECON --> RESSVC
+    RECON --> GW
+</pre>
+        </div>
+        <figcaption><span>Two applications, one schema</span><span class="id">FIG-01</span></figcaption>
+      </figure>
+
+      <ul>
+        <li>The <strong>admin app owns no data</strong>. Every mutation is an HTTP call to the API, which keeps
+          one set of business rules rather than two.</li>
+        <li><code>PaymentService</code> calls <code>ReservationService</code> <strong>across bean boundaries</strong> —
+          that is what makes the two <code>@Transactional</code> proxies real. Merging them would silently
+          collapse both transactions into one via self-invocation.</li>
+        <li><code>PaymentGateway</code> is an interface; <code>FakePaymentGateway</code> is the dev implementation.
+          Swapping in a real PSP touches nothing else.</li>
+      </ul>
+    </section>
+
+    <section id="s2">
+      <h2 class="sec"><span class="n">02</span> Domain model</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+erDiagram
+    ORGANIZER ||--o{ EVENT : hosts
+    HALL ||--o{ SECTION : "divided into"
+    HALL ||--o{ SEAT : contains
+    HALL ||--o{ LAYOUT_OBJECT : "decorated with"
+    SECTION ||--o{ SEAT : "geometrically owns"
+    HALL ||--o{ EVENT : "staged in"
+    EVENT ||--o{ EVENT_PRICING : "priced per section"
+    SECTION ||--o{ EVENT_PRICING : "priced by"
+    EVENT ||--o{ BOOKING : receives
+    BOOKING ||--o{ BOOKING_SEAT : "holds seats"
+    SEAT ||--o{ BOOKING_SEAT : "locked by"
+    SECTION ||--o{ BOOKING : "GA quantity"
+    BOOKING ||--o| PAYMENT : "settled by"
+    BOOKING ||--o{ TICKET : issues
+
+    ORGANIZER { bigint id PK
+                string name }
+    HALL { bigint id PK
+           string name
+           boolean is_seated
+           int capacity
+           int layout_width
+           int layout_height }
+    SECTION { bigint id PK
+              bigint hall_id FK
+              string name
+              string booking_mode
+              int capacity
+              string shape_kind
+              text points
+              string color }
+    SEAT { bigint id PK
+           bigint hall_id FK
+           bigint section_id FK
+           string label
+           int layout_x
+           int layout_y }
+    LAYOUT_OBJECT { bigint id PK
+                    bigint hall_id FK
+                    string object_type
+                    string shape }
+    EVENT { bigint id PK
+            bigint organizer_id FK
+            bigint hall_id FK
+            string status
+            int max_capacity }
+    EVENT_PRICING { bigint id PK
+                    bigint event_id FK
+                    bigint section_id FK
+                    decimal price }
+    BOOKING { bigint id PK
+              bigint event_id FK
+              bigint section_id FK
+              string customer_ref
+              string status
+              int quantity
+              decimal total_amount
+              timestamp expires_at }
+    BOOKING_SEAT { bigint id PK
+                   bigint booking_id FK
+                   bigint seat_id FK
+                   string status
+                   string active_lock UK
+                   string section_name }
+    PAYMENT { bigint id PK
+              bigint booking_id FK
+              string idempotency_key UK
+              string status }
+    TICKET { bigint id PK
+             string ticket_number UK
+             string seat_label }
+    LAYOUT_PRESET { bigint id PK
+                    string name UK
+                    text payload }
+</pre>
+        </div>
+        <figcaption><span>Catalog, inventory and reservation entities</span><span class="id">FIG-02</span></figcaption>
+      </figure>
+
+      <h3>Decisions worth defending</h3>
+      <ul>
+        <li><strong>Sections are geometry, not labels.</strong> <code>SECTION.points</code> is a JSON polygon in the
+          hall’s layout-pixel space. Seats are assigned to a section by <em>point-in-polygon</em> containment, so any
+          shape — circle, triangle, curve, free-form — works without a shape-specific schema.</li>
+        <li><strong>Sections carry no price.</strong> Price lives only in <code>EVENT_PRICING</code>, one row per
+          (event, section). A hall describes a venue; the same section is worth different amounts at different
+          events. Publishing an event requires a price line for every section.</li>
+        <li><strong><code>BOOKING_SEAT</code> snapshots</strong> <code>section_name</code> and <code>currency</code> at
+          sale time, so re-drawing a hall never rewrites history.</li>
+        <li><strong><code>LAYOUT_PRESET</code> is hall-agnostic</strong> — its members are stored as one JSON document
+          with bounding-box-relative coordinates, so a saved block stamps into any hall.</li>
+      </ul>
+
+      <div class="note">
+        <span class="lbl">Removed on purpose</span>
+        <p><code>SeatType</code> (VIP / PREMIUM / REGULAR) was deleted in <code>V8</code>. Once a section owns
+          name, price, capacity and booking mode, seat type was a weaker second classification competing with it —
+          it could not express “Royal” vs “Balcony Left”, and pricing had two rival keys.</p>
+      </div>
+    </section>
+
+    <section id="s3">
+      <h2 class="sec"><span class="n">03</span> Three booking modes</h2>
+      <p><code>ReservationService.createBooking</code> routes on the <strong>request shape, not the hall type</strong>,
+        because one hall can mix seated and general-admission sections in the same room.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Request contains</th><th>Path</th><th>Capacity authority</th><th>Concurrency control</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">seatIds</td><td class="mono">bookSeats</td><td>Per-seat uniqueness</td><td>Optimistic — DB unique index</td></tr>
+            <tr><td class="mono">sectionId + quantity</td><td class="mono">bookGeneralAdmissionSection</td><td><code>section.capacity</code></td><td>Pessimistic — lock the <em>section</em> row</td></tr>
+            <tr><td>neither, non-seated hall</td><td class="mono">bookGeneralAdmission</td><td><code>event.max_capacity</code></td><td>Pessimistic — lock the event row</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Seated booking is <strong>lock-free</strong> and scales horizontally: conflicts surface as a unique-index
+        violation translated to <code>409</code>. General admission has no per-unit identity, so capacity must be
+        counted — <code>capacity − confirmed − reserved</code> — under a row lock.</p>
+
+      <div class="note">
+        <span class="lbl">Lock at the narrowest correct scope</span>
+        <p>Section-based GA locks the <strong>section</strong>, not the event. Locking the event would serialise every
+          GA sale for that event — including sections with entirely independent capacity. This was corrected after
+          review; the legacy whole-event path still locks the event because its capacity genuinely is event-wide.</p>
+      </div>
+    </section>
+
+    <section id="s4">
+      <h2 class="sec"><span class="n">04</span> Seat &amp; booking lifecycle</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+stateDiagram-v2
+    direction TB
+    state "BookingSeat" as BS {
+        [*] --&gt; HELD : booking created
+        HELD --&gt; BOOKED : payment succeeded
+        HELD --&gt; RELEASED : expired · cancelled · swapped out
+        BOOKED --&gt; [*] : event over
+        RELEASED --&gt; [*] : seat back in pool
+    }
+    state "Booking" as B {
+        [*] --&gt; PENDING_PAYMENT : hold acquired, expires in 10 min
+        PENDING_PAYMENT --&gt; CONFIRMED : payment succeeded
+        PENDING_PAYMENT --&gt; EXPIRED : TTL elapsed
+        PENDING_PAYMENT --&gt; CANCELLED : customer cancelled
+    }
+    note right of BS
+        HELD and BOOKED occupy inventory.
+        active_lock is non-null for exactly
+        these two states.
+    end note
+</pre>
+        </div>
+        <figcaption><span>BookingSeat and Booking state machines</span><span class="id">FIG-03</span></figcaption>
+      </figure>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Enum</th><th>Values</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">BookingStatus</td><td class="mono">PENDING_PAYMENT · CONFIRMED · EXPIRED · CANCELLED</td></tr>
+            <tr><td class="mono">BookingSeatStatus</td><td class="mono">HELD · BOOKED · RELEASED</td></tr>
+            <tr><td class="mono">PaymentStatus</td><td class="mono">INITIATED · SUCCEEDED · FAILED · REFUNDED</td></tr>
+            <tr><td class="mono">EventStatus</td><td class="mono">DRAFT · PUBLISHED · CANCELLED · SOLD_OUT</td></tr>
+            <tr><td class="mono">SectionBookingMode</td><td class="mono">SEATED · GENERAL_ADMISSION</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>Expiry is lazy-evaluated.</strong> A <code>PENDING_PAYMENT</code> booking past
+        <code>expires_at</code> is treated as free by the next booking on that event and released in the same
+        transaction. Correctness never depends on the sweeper having run.</p>
+    </section>
+
+    <section id="s5">
+      <h2 class="sec"><span class="n">05</span> Hold acquisition under contention</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor A as Customer A
+    actor B as Customer B
+    participant C as BookingController
+    participant R as ReservationService
+    participant DB as MySQL
+    participant RD as Redis
+
+    A-&gt;&gt;C: POST /api/bookings {eventId, seatIds:[A1,A2]}
+    B-&gt;&gt;C: POST /api/bookings {eventId, seatIds:[A2,A3]}
+    C-&gt;&gt;R: createBooking, routes on seatIds
+
+    Note over R,DB: Both enter the same transaction path
+    R-&gt;&gt;DB: releaseExpiredForEvent(eventId, now)
+    R-&gt;&gt;DB: flush()
+    Note over R,DB: flush is mandatory — INSERTs are ordered&lt;br/&gt;before UPDATEs within one flush
+
+    R-&gt;&gt;DB: findForSeats(...) pre-check
+    DB--&gt;&gt;R: none active (both see this)
+
+    R-&gt;&gt;DB: INSERT booking_seat rows, seat ids sorted
+    Note over DB: uq_booking_seat_active decides
+
+    alt Customer A commits first
+        DB--&gt;&gt;R: OK
+        R-&gt;&gt;RD: evict eventSeatMap AFTER COMMIT
+        R--&gt;&gt;A: 201 {bookingId, expiresAt}
+    end
+    DB--&gt;&gt;R: 23000 duplicate '5-A2'
+    R--&gt;&gt;B: 409 "seats were just taken"
+</pre>
+        </div>
+        <figcaption><span>Two customers, one seat — the index decides</span><span class="id">FIG-04</span></figcaption>
+      </figure>
+
+      <ul>
+        <li><strong>The pre-check is cosmetic.</strong> <code>findForSeats</code> exists only to name the taken seats
+          in a friendly message. Both customers can pass it; the index is what resolves the race.</li>
+        <li><strong>Flush ordering is load-bearing.</strong> Releasing expired holds is an <code>UPDATE</code>;
+          taking the new hold is an <code>INSERT</code>. Hibernate orders INSERTs first within a flush, so without
+          the explicit <code>flush()</code> the insert collides with the row being freed.</li>
+        <li><strong>Seats are sorted by id before insert</strong> so two overlapping requests can’t take index locks
+          in opposite order and deadlock.</li>
+      </ul>
+    </section>
+
+    <section id="s6">
+      <h2 class="sec"><span class="n">06</span> The double-booking guard</h2>
+      <p>MySQL has no partial indexes. A generated column plus NULL semantics reproduces one —
+        defined in <code>V2__reservation_schema.sql</code>:</p>
+
+<pre class="code">active_lock VARCHAR(48) GENERATED ALWAYS AS (
+    CASE WHEN status IN ('HELD', 'BOOKED')
+         THEN CONCAT(event_id, '-', seat_id)
+         ELSE NULL END
+) STORED,
+CONSTRAINT uq_booking_seat_active UNIQUE (active_lock)</pre>
+
+      <ul>
+        <li>Occupied rows produce a key like <code>5-A2</code> → a second occupant violates the constraint.</li>
+        <li><code>RELEASED</code> rows produce <code>NULL</code>, and MySQL permits <strong>unlimited NULLs</strong>
+          in a unique index → seats recycle freely and history stays append-only.</li>
+        <li>Correctness survives even if the application is bypassed — scripts, migrations, a second service.</li>
+      </ul>
+
+      <div class="note warn">
+        <span class="lbl">This has already failed once — verify it</span>
+        <p>Hibernate <code>ddl-auto: update</code>/<code>create</code> recreates <code>booking_seat</code> from the
+          entity class, and it <strong>cannot see a generated column</strong> because it is not a mapped field. The
+          column and its unique index vanish silently: every code path still looks correct, but the conflict handler
+          becomes dead code and double-booking becomes possible.</p>
+        <p>This happened in this project and was found by comparing the live schema against the migration —
+          not by reading code. <code>ddl-auto</code> is now <code>validate</code>, and
+          <code>SchemaGuardIntegrationTest</code> asserts the column, its uniqueness, and that
+          <code>status</code> is still <code>varchar</code> rather than a Hibernate-generated <code>enum</code>.</p>
+      </div>
+    </section>
+
+    <section id="s7">
+      <h2 class="sec"><span class="n">07</span> Payment</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor U as Customer
+    participant PS as PaymentService
+    participant RS as ReservationService
+    participant DB as MySQL
+    participant GW as PaymentGateway
+    participant RD as Redis
+
+    U-&gt;&gt;PS: POST /api/bookings/{id}/payment
+
+    Note over PS,DB: TXN 1 — beginPayment
+    PS-&gt;&gt;RS: beginPayment(bookingId, customerRef)
+    RS-&gt;&gt;DB: assert PENDING_PAYMENT and not expired
+    RS-&gt;&gt;DB: INSERT payment INITIATED, key "booking-{id}"
+    RS--&gt;&gt;PS: PaymentContext snapshot
+
+    Note over PS,GW: NO TRANSACTION OPEN
+    PS-&gt;&gt;GW: charge(customerRef, amount, idempotencyKey)
+    alt gateway answers
+        GW--&gt;&gt;PS: PaymentResult
+    else exception
+        GW--xPS: unknown outcome
+        PS--&gt;&gt;U: "Payment is still processing"
+        Note over PS: row stays INITIATED for the reconciler
+    end
+
+    Note over PS,RD: TXN 2 — applyPaymentResult
+    PS-&gt;&gt;RS: applyPaymentResult(paymentId, result)
+    alt hold still valid
+        RS-&gt;&gt;DB: payment SUCCEEDED, booking CONFIRMED
+        RS-&gt;&gt;DB: seats HELD to BOOKED, generate tickets
+        RS-&gt;&gt;DB: maybeMarkSoldOut(event)
+        RS-&gt;&gt;RD: evict caches AFTER COMMIT
+        RS--&gt;&gt;U: 200 Confirmed
+    else hold expired during charge
+        RS--xDB: throw, ROLLBACK, payment stays INITIATED
+        RS--&gt;&gt;U: "charge will be refunded shortly"
+    end
+</pre>
+        </div>
+        <figcaption><span>Three steps, two transactions, gateway in the gap</span><span class="id">FIG-05</span></figcaption>
+      </figure>
+
+      <ul>
+        <li>The <code>INITIATED</code> row is the <strong>durable record of intent</strong>. If the process dies after
+          it, <code>PaymentReconciliationJob</code> queries the gateway by idempotency key and finishes or refunds.</li>
+        <li><strong>The throw is the recovery mechanism.</strong> When the hold expired mid-charge, rolling back
+          preserves <code>INITIATED</code> so reconciliation can refund. “Helpfully” not throwing would strand real charges.</li>
+        <li><code>generateTickets</code> is <strong>idempotent</strong> — reconciliation may confirm the same booking twice.</li>
+        <li>Concurrent <code>pay()</code> calls: the unique <code>booking_id</code> lets one through; the loser now
+          gets <code>409</code> rather than a 500.</li>
+      </ul>
+
+      <div class="note">
+        <span class="lbl">Known gap</span>
+        <p><code>maybeMarkSoldOut</code> is one-way. Nothing moves an event from <code>SOLD_OUT</code> back to
+          <code>PUBLISHED</code>, and <code>cancelBooking</code> rejects anything not <code>PENDING_PAYMENT</code> —
+          so there is currently no refund-after-confirmation path returning seats to the pool.</p>
+      </div>
+    </section>
+
+    <section id="s8">
+      <h2 class="sec"><span class="n">08</span> Expiry &amp; cleanup</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as Next Customer
+    participant RS as ReservationService
+    participant DB as MySQL
+    participant SW as HoldSweeper
+    participant RC as PaymentReconciliationJob
+    participant GW as PaymentGateway
+
+    Note over U,DB: Path 1 — lazy release (primary)
+    U-&gt;&gt;RS: POST /api/bookings on the same event
+    RS-&gt;&gt;DB: releaseExpiredForEvent — booking EXPIRED, seats RELEASED
+    RS-&gt;&gt;DB: flush, then INSERT the new hold
+    Note over RS,DB: freed and re-sold in one transaction
+
+    Note over SW,DB: Path 2 — sweeper (safety net, every 30s)
+    loop until a short batch
+        SW-&gt;&gt;RS: releaseExpired()
+        RS-&gt;&gt;DB: SELECT expired LIMIT 200 ORDER BY expires_at
+        RS-&gt;&gt;DB: expire batch, release seats
+    end
+
+    Note over RC,GW: Path 3 — payment reconciliation (every 30s)
+    RC-&gt;&gt;RS: findPaymentsToReconcile — INITIATED older than 1 min
+    RC-&gt;&gt;GW: lookup(idempotencyKey)
+    alt charged and hold valid
+        RC-&gt;&gt;RS: reconcile — confirm booking
+    else charged but hold gone
+        RC-&gt;&gt;GW: refund(reference)
+        RC-&gt;&gt;RS: markRefunded
+    else never charged
+        RC-&gt;&gt;RS: mark payment FAILED
+    end
+</pre>
+        </div>
+        <figcaption><span>Lazy release, batched sweeper, payment reconciler</span><span class="id">FIG-06</span></figcaption>
+      </figure>
+
+      <p><strong>Lazy release is the primary mechanism</strong> — hot events recycle inventory instantly. The sweeper
+        only matters for events nobody is browsing, and works in <strong>200-row batches capped at 20 batches per
+        tick</strong> so a flash-sale expiry wave can’t lock thousands of rows in one transaction.</p>
+
+      <div class="note">
+        <span class="lbl">Invariant</span>
+        <p>The sweeper going down degrades <em>performance</em>, never <em>correctness</em>.</p>
+      </div>
+    </section>
+
+    <section id="s9">
+      <h2 class="sec"><span class="n">09</span> Caching</h2>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Cache</th><th>Key</th><th>TTL</th><th>Pattern</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">eventSeatMap</td><td class="mono">#eventId</td><td class="mono">2 s</td><td>Cache-aside + evict after commit</td></tr>
+            <tr><td class="mono">eventAvailability</td><td class="mono">#eventId</td><td class="mono">2 s</td><td>Cache-aside + evict after commit</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <ul>
+        <li><strong>Why 2 seconds.</strong> A stale seat map can never cause a double-booking — the index stops that.
+          It only means a customer clicks a seat that just went and receives a <code>409</code>. Seconds keeps that
+          rare without hammering MySQL.</li>
+        <li><strong>Evict, never write-through</strong>, and register it via <code>TransactionSynchronization</code>
+          on <code>afterCommit</code> — otherwise a concurrent reader repopulates the cache with pre-commit state
+          and the stale entry outlives the transaction.</li>
+        <li><strong>Redis failure is survivable.</strong> <code>CacheErrorHandler</code> logs and falls through to
+          MySQL with a 500 ms timeout.</li>
+      </ul>
+
+      <div class="note">
+        <span class="lbl">Open risks</span>
+        <p>Cache errors are swallowed with no load shedding, so a Redis outage sends full read traffic to the
+          primary. The fixed 2 s TTL also has no jitter, producing synchronised expiry bursts. Both need a
+          circuit breaker and jittered TTLs before real load.</p>
+      </div>
+    </section>
+
+    <section id="s10">
+      <h2 class="sec"><span class="n">10</span> Layout editor</h2>
+      <p>The admin app renders the hall as an interactive canvas — an SVG section overlay above absolutely
+        positioned seat and table chips, plus a Three.js 3D view fed by the same snapshot.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Capability</th><th>Detail</th></tr></thead>
+          <tbody>
+            <tr><td>Section shapes</td><td>Rectangle, circle, triangle, curve presets, or free-drawn polygons — all stored as plain point arrays</td></tr>
+            <tr><td>Transforms</td><td>Move, per-vertex edit, symmetric resize, single-edge stretch, rotate about centre</td></tr>
+            <tr><td>Selection</td><td>Ctrl/Shift-click, marquee drag selecting seats <em>and</em> sections together; Alt+click drills into a group</td></tr>
+            <tr><td>Grouping</td><td>Ctrl+G binds sections + seats + tables; dragging any member moves all</td></tr>
+            <tr><td>Clipboard</td><td>Copy/paste a whole block including its seats, placed beside the original</td></tr>
+            <tr><td>Presets</td><td>Named, server-persisted templates stamped into any hall</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <ul>
+        <li>Everything is edited as <strong>unsaved drafts</strong> and persisted by a single
+          <code>PUT /api/halls/{id}/seats</code> full-set reconcile — create, update and delete inferred by
+          comparing sent ids against stored ones.</li>
+        <li><strong>Seats are assigned to sections server-side</strong> by point-in-polygon containment, so the
+          editor never has to maintain that relationship.</li>
+        <li>Deleting a section cascades to its price lines but is <strong>refused if it has bookings</strong>.</li>
+      </ul>
+    </section>
+
+    <section id="s11">
+      <h2 class="sec"><span class="n">11</span> Operations</h2>
+
+      <h3>Configuration</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Key</th><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">hold-duration</td><td class="mono">PT10M</td><td>How long a seat stays HELD unpaid</td></tr>
+            <tr><td class="mono">max-seats-per-booking</td><td class="mono">2</td><td>Testing value — raise before production</td></tr>
+            <tr><td class="mono">sweep-interval</td><td class="mono">PT30S</td><td>Sweeper and reconciler cadence</td></tr>
+            <tr><td class="mono">cache-ttl</td><td class="mono">PT2S</td><td>Redis entry lifetime</td></tr>
+            <tr><td class="mono">reconcile-after</td><td class="mono">PT1M</td><td>How long a payment may stay in doubt</td></tr>
+            <tr><td class="mono">ddl-auto</td><td class="mono">validate</td><td><strong>Must never be update/create</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Schema history</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Migration</th><th>Introduces</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">V1</td><td>Organizer, hall, seat, event, pricing</td></tr>
+            <tr><td class="mono">V2</td><td>Booking, booking_seat, <strong>the active_lock guard</strong></td></tr>
+            <tr><td class="mono">V3</td><td>Payment</td></tr>
+            <tr><td class="mono">V4–V5</td><td>Seat layout coordinates, layout objects</td></tr>
+            <tr><td class="mono">V6</td><td>First-class sections and tickets</td></tr>
+            <tr><td class="mono">V7</td><td>Layout presets</td></tr>
+            <tr><td class="mono">V8</td><td>Removes seat types — sections own classification</td></tr>
+            <tr><td class="mono">V9</td><td>Moves price from section to event</td></tr>
+            <tr><td class="mono">V10</td><td>Booking hot-path composite indexes</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Before production</h3>
+      <ul class="check">
+        <li><code>uq_booking_seat_active</code> exists in the deployed database — asserted by test, not inspection</li>
+        <li><code>ddl-auto: validate</code> in every environment</li>
+        <li><code>max-seats-per-booking</code> raised from its testing value of 2</li>
+        <li>Redis circuit breaker and jittered cache TTLs</li>
+        <li>Sweeper and reconciler leader-elected, so replicas don’t duplicate work</li>
+        <li>A refund path that returns BOOKED seats to the pool and clears SOLD_OUT</li>
+        <li>Seat-map read paginated for very large halls</li>
+      </ul>
+    </section>
+
+    <section id="s12">
+      <h2 class="sec"><span class="n">12</span> Running many instances</h2>
+      <p>Most of the system is safe to replicate because its guarantees live in the database rather
+        than in application memory. Three things needed fixing before a second instance was viable.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Concern</th><th>Mechanism</th><th>Safe across instances</th></tr></thead>
+          <tbody>
+            <tr><td>Seat allocation</td><td>Unique index on <code>active_lock</code></td><td>Yes — enforced by the database</td></tr>
+            <tr><td>GA capacity</td><td><code>SELECT … FOR UPDATE</code> on the section</td><td>Yes</td></tr>
+            <tr><td>Rate limit &amp; cache</td><td>Redis, shared</td><td>Yes</td></tr>
+            <tr><td>Concurrent edits</td><td><code>@Version</code></td><td>Yes</td></tr>
+            <tr><td>Refunds</td><td><strong>Claim before calling the provider</strong></td><td>Fixed — see below</td></tr>
+            <tr><td>Scheduled jobs</td><td><strong>Redis lease</strong></td><td>Fixed</td></tr>
+            <tr><td>Hold expiry</td><td><strong>Database-aligned clock</strong></td><td>Fixed</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Claiming a refund before issuing it</h3>
+      <p>Deciding “a refund is owed” happens in a transaction; issuing it is a network call outside
+        one. Previously the payment row was left <code>INITIATED</code> in between, so two replicas
+        could both decide the same refund and both call the provider. On a single instance the same
+        thing happened whenever the process died between refunding and recording it.</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant A as Replica A
+    participant B as Replica B
+    participant DB as Database
+    participant GW as Provider
+
+    A-&gt;&gt;DB: reconcile — refund owed
+    DB--&gt;&gt;A: claim taken · status = REFUND_PENDING
+    B-&gt;&gt;DB: reconcile — same payment
+    DB--&gt;&gt;B: already claimed · no instruction
+    A-&gt;&gt;GW: refund(reference)
+    A-&gt;&gt;DB: status = REFUNDED
+    Note over B: B issues nothing — exactly one refund
+</pre>
+        </div>
+        <figcaption><span>The refund claim</span><span class="id">FIG-09</span></figcaption>
+      </figure>
+
+      <p>The claim is completed by <code>markRefunded</code>, which only accepts a row it owns; a
+        worker that dies mid-refund leaves the row in <code>REFUND_PENDING</code>, which the
+        reconciliation queue picks up and <em>resumes</em> rather than duplicating.</p>
+
+      <h3>One instance per tick</h3>
+      <p><code>SchedulerLease</code> uses <code>SET key owner NX PX ttl</code> — atomic in Redis — with
+        a TTL just under the schedule interval. It is never renewed or released early: it simply
+        expires, so a worker that dies blocks the job for at most one interval and no cleanup path
+        can leave a permanent lock behind.</p>
+      <div class="note">
+        <span class="lbl">The lease is an optimisation, not the guarantee</span>
+        <p>It fails open: if Redis is unreachable the job runs anyway. Duplicate work is wasteful but
+          not incorrect — the sweeper is idempotent and refunds are claimed in the database. Failing
+          closed would stop refunds and hold cleanup during a cache outage, which is worse.</p>
+      </div>
+
+      <h3>Agreeing what time it is</h3>
+      <p>Expiry is judged against <code>expires_at</code>, a value the database owns. If each replica
+        used its own system clock, skew would let one instance release a hold while another still
+        considered it live — and took payment for it.</p>
+      <p><code>DatabaseAlignedClock</code> replaces the injected <code>Clock</code>, so every existing
+        <code>clock.instant()</code> call site is corrected with no change at the call site. It samples
+        <code>SELECT CURRENT_TIMESTAMP(6)</code> once a minute and applies the resulting <em>offset</em>
+        locally, keeping the hot booking path free of a round trip. The sample subtracts half the query
+        latency so a slow reading does not bias time forward, and an offset beyond five minutes is
+        rejected as noise with a warning to check NTP.</p>
+    </section>
+
+    <section id="s13">
+      <h2 class="sec"><span class="n">13</span> High-demand on-sales</h2>
+      <p>Seated booking is lock-free and shards naturally across seats, so it scales. The pressure
+        points are the cache and the general-admission lock.</p>
+
+      <h3>Cache stampede</h3>
+      <p>With a fixed TTL every entry written during a burst expires in the same instant, and the next
+        wave of readers all miss together — the exact load the cache exists to prevent, arriving on a
+        timer. Two changes:</p>
+      <ul>
+        <li><strong>Jittered lifetimes.</strong> Each entry gets the configured TTL ±20%, spreading
+          expiry across a window instead of concentrating it on one tick.</li>
+        <li><strong>Single-flight.</strong> <code>@Cacheable(sync = true)</code> collapses a burst of
+          concurrent misses for the same event into one loader call per instance, so a miss costs
+          <em>N</em> queries rather than one per waiting request.</li>
+      </ul>
+
+      <h3>Connection pool</h3>
+      <p>The Hikari default of 10 was a hard concurrency ceiling: general-admission booking holds a row
+        lock for the length of its transaction, so a burst could occupy every connection while request
+        threads queued behind them. Now sized explicitly, with a <strong>3-second acquisition timeout
+        so requests fail fast rather than deepening the backlog</strong>, and leak detection to surface
+        a connection held longer than any legitimate transaction needs.</p>
+      <div class="note">
+        <span class="lbl">Budget is per instance</span>
+        <p><code>maximum-pool-size × replicas</code> must stay well under MySQL's
+          <code>max_connections</code> (151 by default). Scaling out and scaling the pool are the same
+          budget spent twice.</p>
+      </div>
+
+      <h3>Shortening the GA critical section</h3>
+      <p>Capacity has no per-ticket identity, so no constraint can express “sum ≤ capacity” — the count
+        and the insert must be serialised against each other. That lock is the throughput ceiling for a
+        section, so everything that does <em>not</em> need to be consistent with it now happens before
+        the lock is taken:</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Step</th><th>Before</th><th>Now</th></tr></thead>
+          <tbody>
+            <tr><td>Release expired holds + flush</td><td>inside the lock</td><td><strong>outside</strong></td></tr>
+            <tr><td>Resolve the event price</td><td>inside the lock</td><td><strong>outside</strong></td></tr>
+            <tr><td>Count confirmed + reserved</td><td>inside</td><td>inside — must be</td></tr>
+            <tr><td>Insert the booking</td><td>inside</td><td>inside — must be</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <span class="lbl">Why not a maintained counter</span>
+        <p>A <code>sold_units</code> column updated by one atomic conditional statement would shorten the
+          critical section further, to microseconds. It was not taken: the counter would have to be
+          decremented correctly on every cancel, lazy expiry, sweep and refund, and a counter that drifts
+          oversells silently — strictly worse than a lock that is merely slow. Worth revisiting only with
+          measurements showing this is the binding constraint.</p>
+      </div>
+
+      <h3>Still open</h3>
+      <ul>
+        <li>All reads go to the primary; there is no replica routing, so browsing competes with selling.</li>
+        <li>No waiting room or queue — a stampede reaches the application tier in full.</li>
+        <li>A seat-map cache miss is <code>O(seats + active holds)</code>; very large halls would benefit
+          from paginating by section.</li>
+      </ul>
+    </section>
+
+    </main>
+  </div>
+</div>
+</div>

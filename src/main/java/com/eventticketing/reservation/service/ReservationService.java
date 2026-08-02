@@ -16,6 +16,8 @@ import com.eventticketing.catalog.service.SectionGeometry;
 import com.eventticketing.common.exception.BusinessRuleException;
 import com.eventticketing.common.exception.ConflictException;
 import com.eventticketing.common.exception.ResourceNotFoundException;
+import com.eventticketing.common.security.CustomerId;
+import com.eventticketing.common.security.UnpaidHoldThrottle;
 import com.eventticketing.payment.PaymentResult;
 import com.eventticketing.reservation.config.CacheNames;
 import com.eventticketing.reservation.config.ReservationProperties;
@@ -47,12 +49,14 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -69,6 +73,13 @@ public class ReservationService {
     private static final List<BookingSeatStatus> ACTIVE_SEAT_STATUSES =
             List.of(BookingSeatStatus.HELD, BookingSeatStatus.BOOKED);
 
+    /** Failed reconciliations before a payment is parked for a human. ~1h of backoff. */
+    private static final int MAX_RECONCILE_ATTEMPTS = 6;
+    private static final Duration RECONCILE_BASE_BACKOFF = Duration.ofSeconds(30);
+    private static final Duration MAX_RECONCILE_BACKOFF = Duration.ofHours(1);
+    /** Bounds one tick, so a backlog can never pull an unbounded set into memory. */
+    private static final int RECONCILE_BATCH_SIZE = 200;
+
     private final BookingRepository bookingRepository;
     private final BookingSeatRepository bookingSeatRepository;
     private final PaymentRepository paymentRepository;
@@ -80,6 +91,7 @@ public class ReservationService {
     private final Clock clock;
     private final CacheManager cacheManager;
     private final ObjectMapper objectMapper;
+    private final UnpaidHoldThrottle unpaidHoldThrottle;
 
     public ReservationService(BookingRepository bookingRepository,
                               BookingSeatRepository bookingSeatRepository,
@@ -91,7 +103,8 @@ public class ReservationService {
                               ReservationProperties properties,
                               Clock clock,
                               CacheManager cacheManager,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              UnpaidHoldThrottle unpaidHoldThrottle) {
         this.bookingRepository = bookingRepository;
         this.bookingSeatRepository = bookingSeatRepository;
         this.paymentRepository = paymentRepository;
@@ -103,13 +116,16 @@ public class ReservationService {
         this.clock = clock;
         this.cacheManager = cacheManager;
         this.objectMapper = objectMapper;
+        this.unpaidHoldThrottle = unpaidHoldThrottle;
     }
 
     // ------------------------------------------------------------------ booking
 
     @Transactional
-    public BookingResponse createBooking(CreateBookingRequest request) {
+    public BookingResponse createBooking(CreateBookingRequest request, CustomerId customer) {
         Instant now = clock.instant();
+        requireNoActiveHold(customer, now);
+    
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> ResourceNotFoundException.of("Event", request.eventId()));
 
@@ -118,22 +134,42 @@ public class ReservationService {
                     "Event is not open for booking (status " + event.getStatus() + ").");
         }
 
+
         // Route by the request, not the hall: a hall may mix seated and general-admission sections.
         if (request.seatIds() != null && !request.seatIds().isEmpty()) {
-            return bookSeats(event, request, now);
+            return bookSeats(event, request, customer, now);
         }
         if (request.sectionId() != null) {
-            return bookGeneralAdmissionSection(event, request, now);
+            return bookGeneralAdmissionSection(event, request, customer, now);
         }
         // Legacy: a non-seated hall without sections books against the event's overall capacity.
         if (!event.getHall().isSeated()) {
-            return bookGeneralAdmission(event, request, now);
+            return bookGeneralAdmission(event, request, customer, now);
         }
         throw new BusinessRuleException(
                 "Provide seatIds (seated) or a sectionId with quantity (general admission).");
     }
 
-    private BookingResponse bookSeats(Event event, CreateBookingRequest request, Instant now) {
+    /**
+     * One live hold per customer. Without this, a single account can hold inventory across every
+     * event at once — the payload cap only limits one request, not how many requests you make.
+     *
+     * <p>Deliberately scoped to the whole account rather than per event: an attacker spreading
+     * holds across events does the same damage as concentrating them.
+     */
+    private void requireNoActiveHold(CustomerId customer, Instant now) {
+        List<Booking> active = bookingRepository.findActiveHolds(customer.ref(), now);
+        if (active.isEmpty()) {
+            return;
+        }
+        Booking held = active.get(0);
+        throw new ConflictException(
+                "You already have seats on hold (booking " + held.getId()
+                        + "). Pay for it or cancel it before starting another.");
+    }
+
+    private BookingResponse bookSeats(Event event, CreateBookingRequest request,
+                                      CustomerId customer, Instant now) {
         List<Long> requested = request.seatIds();
         if (requested == null || requested.isEmpty()) {
             throw new BusinessRuleException("A seated event requires seatIds.");
@@ -177,7 +213,7 @@ public class ReservationService {
             throw new ConflictException("These seats are already reserved or booked: " + taken + ".");
         }
 
-        Booking booking = newBooking(event, request.customerRef(), seats.size(), now);
+        Booking booking = newBooking(event, customer, seats.size(), now);
         BigDecimal total = BigDecimal.ZERO;
         for (Seat seat : seats) {
             BigDecimal price = seatPrice(event, seat);
@@ -203,7 +239,8 @@ public class ReservationService {
         return BookingResponse.from(booking);
     }
 
-    private BookingResponse bookGeneralAdmission(Event event, CreateBookingRequest request, Instant now) {
+    private BookingResponse bookGeneralAdmission(Event event, CreateBookingRequest request,
+                                                 CustomerId customer, Instant now) {
         Integer quantity = request.quantity();
         if (quantity == null || quantity < 1) {
             throw new BusinessRuleException("A non-seated event requires a quantity of at least 1.");
@@ -232,7 +269,7 @@ public class ReservationService {
             throw new BusinessRuleException("No general-admission price configured for this event.");
         }
 
-        Booking booking = newBooking(locked, request.customerRef(), quantity, now);
+        Booking booking = newBooking(locked, customer, quantity, now);
         booking.setTotalAmount(price.multiply(BigDecimal.valueOf(quantity)));
         bookingRepository.save(booking);
         evictAfterCommit(locked.getId());
@@ -244,7 +281,8 @@ public class ReservationService {
      * (independent of any seated sections in the same hall). Availability =
      * {@code capacity - confirmed - reserved} for that section.
      */
-    private BookingResponse bookGeneralAdmissionSection(Event event, CreateBookingRequest request, Instant now) {
+    private BookingResponse bookGeneralAdmissionSection(Event event, CreateBookingRequest request,
+                                                        CustomerId customer, Instant now) {
         Integer quantity = request.quantity();
         if (quantity == null || quantity < 1) {
             throw new BusinessRuleException("A general-admission booking requires a quantity of at least 1.");
@@ -267,13 +305,27 @@ public class ReservationService {
             throw new BusinessRuleException("Section '" + section.getName() + "' has no configured capacity.");
         }
 
-        // Serialise capacity checks for THIS SECTION only. Capacity is a section property, so
-        // locking the section instead of the event lets other sections of the same event sell in
-        // parallel; previously every general-admission sale for an event queued on one row.
-        sectionRepository.findByIdForUpdate(section.getId())
-                .orElseThrow(() -> ResourceNotFoundException.of("Section", section.getId()));
+        // --- Outside the lock -------------------------------------------------------------
+        // Everything that does not have to be consistent with the capacity check is done first.
+        // Under a flash sale the section lock is the throughput ceiling — one sale at a time —
+        // so every statement moved out of the critical section is throughput bought back.
+        // Reclaiming expired holds touches other bookings, not this section's counters, and
+        // pricing is read-only reference data; neither needs to be serialised.
         releaseExpiredForEvent(event.getId(), now);
         bookingRepository.flush();
+
+        BigDecimal price = resolveSectionPrice(event, section);
+        if (price == null) {
+            throw new BusinessRuleException("No price configured for section '" + section.getName() + "'.");
+        }
+
+        // --- Critical section -------------------------------------------------------------
+        // Capacity has no per-ticket identity, so no constraint can express "sum <= capacity".
+        // The count and the insert must therefore be serialised against each other, and nothing
+        // else belongs between them. Locking the section rather than the event lets other
+        // sections of the same event keep selling in parallel.
+        sectionRepository.findByIdForUpdate(section.getId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Section", section.getId()));
 
         long confirmed = bookingRepository.sumConfirmedQuantityBySection(section.getId());
         long reserved = bookingRepository.sumReservedQuantityBySection(section.getId(), now);
@@ -283,12 +335,7 @@ public class ReservationService {
                     + "': only " + Math.max(available, 0) + " left.");
         }
 
-        BigDecimal price = resolveSectionPrice(event, section);
-        if (price == null) {
-            throw new BusinessRuleException("No price configured for section '" + section.getName() + "'.");
-        }
-
-        Booking booking = newBooking(event, request.customerRef(), quantity, now);
+        Booking booking = newBooking(event, customer, quantity, now);
         booking.setSection(section);
         booking.setTotalAmount(price.multiply(BigDecimal.valueOf(quantity)));
         bookingRepository.save(booking);
@@ -307,10 +354,10 @@ public class ReservationService {
                 .toList();
     }
 
-    private Booking newBooking(Event event, String customerRef, int quantity, Instant now) {
+    private Booking newBooking(Event event, CustomerId customer, int quantity, Instant now) {
         Booking booking = new Booking();
         booking.setEvent(event);
-        booking.setCustomerRef(customerRef);
+        booking.setCustomerRef(customer.ref());
         booking.setStatus(BookingStatus.PENDING_PAYMENT);
         booking.setQuantity(quantity);
         booking.setExpiresAt(now.plus(properties.holdDuration()));
@@ -340,14 +387,32 @@ public class ReservationService {
         Payment payment = paymentRepository.findByBookingId(bookingId).orElseGet(() -> {
             Payment created = new Payment();
             created.setBooking(booking);
-            created.setIdempotencyKey("booking-" + bookingId);
             created.setCustomerRef(booking.getCustomerRef());
-            created.setAmount(booking.getTotalAmount());
+            created.setAttempt(1);
+            created.setIdempotencyKey(idempotencyKey(bookingId, 1));
             return created;
         });
         if (payment.getStatus() == PaymentStatus.SUCCEEDED) {
             throw new BusinessRuleException("This booking has already been paid.");
         }
+        // An INITIATED payment is in doubt: the gateway may already hold a charge we never
+        // recorded. Re-keying now would orphan it — reconciliation looks the charge up by the key
+        // on this row, and the old one would be gone. Make the caller wait for that to settle.
+        if (payment.getStatus() == PaymentStatus.INITIATED && payment.getId() != null) {
+            throw new ConflictException(
+                    "A payment for this booking is already being processed. Check back shortly.");
+        }
+        // A terminal failure means the gateway has stored an outcome against the current key and
+        // would replay it. Advance to a fresh key so this really is a new charge.
+        if (payment.getStatus() == PaymentStatus.FAILED) {
+            payment.setAttempt(payment.getAttempt() + 1);
+            payment.setIdempotencyKey(idempotencyKey(bookingId, payment.getAttempt()));
+            payment.setReference(null);
+        }
+        // Always re-read the amount: changeSeats can alter the total while the hold is pending, and
+        // charging one figure while recording another would leave the audit trail disagreeing with
+        // the money — and a provider reject the key/amount mismatch outright.
+        payment.setAmount(booking.getTotalAmount());
         payment.setStatus(PaymentStatus.INITIATED);
         payment.setFailureReason(null);
         Payment saved;
@@ -361,7 +426,35 @@ public class ReservationService {
         }
 
         return new PaymentContext(saved.getId(), bookingId, booking.getCustomerRef(),
-                booking.getTotalAmount(), saved.getIdempotencyKey());
+                saved.getAmount(), saved.getIdempotencyKey());
+    }
+
+    /**
+     * One key per attempt. The provider replays a stored response for a repeated key, so this is
+     * the boundary between "retry the same charge safely" and "make a genuinely new charge".
+     */
+    private String idempotencyKey(Long bookingId, int attempt) {
+        return "booking-" + bookingId + "-" + attempt;
+    }
+
+    /**
+     * Records the provider's reference the moment a charge comes back, in its own transaction.
+     *
+     * <p>Called between the charge and {@link #applyPaymentResult} because that method deliberately
+     * rolls back when the hold has expired — any reference written there would be discarded along
+     * with it. Persisting separately means reconciliation can refund by reference directly instead
+     * of depending on an idempotency-key lookup, which providers only honour for a limited window.
+     */
+    @Transactional
+    public void recordChargeIssued(Long paymentId, String reference) {
+        if (reference == null) {
+            return;
+        }
+        paymentRepository.findById(paymentId).ifPresent(payment -> {
+            if (payment.getStatus() == PaymentStatus.INITIATED && payment.getReference() == null) {
+                payment.setReference(reference);
+            }
+        });
     }
 
     /**
@@ -414,6 +507,23 @@ public class ReservationService {
         generateTickets(booking);
         maybeMarkSoldOut(booking.getEvent());
         evictAfterCommit(booking.getEvent().getId());
+        // The customer converted, so their unpaid-hold tally is wiped: paying must never leave
+        // someone waiting out a throttle meant for squatters. Deferred to after commit so a
+        // rolled-back confirmation cannot hand out a fresh budget.
+        clearThrottleAfterCommit(booking.getCustomerRef());
+    }
+
+    private void clearThrottleAfterCommit(String customerRef) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    unpaidHoldThrottle.onPaymentConfirmed(customerRef);
+                }
+            });
+        } else {
+            unpaidHoldThrottle.onPaymentConfirmed(customerRef);
+        }
     }
 
     /**
@@ -467,10 +577,102 @@ public class ReservationService {
     /** In-doubt payments (INITIATED and untouched for a while) that need reconciling. */
     @Transactional(readOnly = true)
     public List<PaymentSummary> findPaymentsToReconcile() {
-        Instant threshold = clock.instant().minus(properties.reconcileAfter());
-        return paymentRepository.findByStatusAndUpdatedAtBefore(PaymentStatus.INITIATED, threshold).stream()
+        Instant now = clock.instant();
+        // Backoff is applied by asking for rows whose last attempt is older than the *longest*
+        // delay any row could be owed, then filtering precisely per attempt count. One query,
+        // and a row is never retried sooner than its own backoff allows.
+        List<Payment> candidates = paymentRepository.findReconciliationQueue(
+                now.minus(properties.reconcileAfter()),
+                now.minus(MAX_RECONCILE_BACKOFF),
+                PageRequest.of(0, RECONCILE_BATCH_SIZE));
+
+        return candidates.stream()
+                .filter(p -> isDueForRetry(p, now))
                 .map(p -> new PaymentSummary(p.getId(), p.getIdempotencyKey()))
                 .toList();
+    }
+
+    /** Exponential backoff: 30s, 1m, 2m, 4m… capped, so transients recover without hammering. */
+    private boolean isDueForRetry(Payment payment, Instant now) {
+        if (payment.getLastReconcileAt() == null) {
+            return true;
+        }
+        long seconds = Math.min(
+                RECONCILE_BASE_BACKOFF.getSeconds() * (1L << Math.min(payment.getReconcileAttempts(), 12)),
+                MAX_RECONCILE_BACKOFF.getSeconds());
+        return payment.getLastReconcileAt().plusSeconds(seconds).isBefore(now);
+    }
+
+    /**
+     * Records that reconciliation could not resolve a payment, and dead-letters it once it has
+     * failed too often.
+     *
+     * <p>Runs in its own transaction because the attempt that failed has already rolled back —
+     * which is precisely why the row's {@code updated_at} never moved and it was retried forever.
+     * Parking it in {@link PaymentStatus#NEEDS_REVIEW} removes it from the queue so a broken
+     * record stops delaying the healthy in-doubt payments behind it.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordReconcileFailure(Long paymentId, String error) {
+        paymentRepository.findById(paymentId).ifPresent(payment -> {
+            boolean stillOurs = payment.getStatus() == PaymentStatus.INITIATED
+                    || payment.getStatus() == PaymentStatus.REFUND_PENDING;
+            if (!stillOurs) {
+                return; // resolved by another run in the meantime
+            }
+            payment.setReconcileAttempts(payment.getReconcileAttempts() + 1);
+            payment.setLastReconcileAt(clock.instant());
+            payment.setLastReconcileError(truncate(error));
+            if (payment.getReconcileAttempts() >= MAX_RECONCILE_ATTEMPTS) {
+                payment.setStatus(PaymentStatus.NEEDS_REVIEW);
+                log.error("Payment {} dead-lettered after {} failed reconciliations: {}",
+                        paymentId, payment.getReconcileAttempts(), payment.getLastReconcileError());
+            }
+        });
+    }
+
+    private String truncate(String value) {
+        if (value == null) {
+            return "Unknown error";
+        }
+        return value.length() <= 500 ? value : value.substring(0, 497) + "...";
+    }
+
+    // ------------------------------------------------------- dead letter operations
+
+    /** How many payments are parked for an operator. Alert on any non-zero value. */
+    @Transactional(readOnly = true)
+    public long countPaymentsNeedingReview() {
+        return paymentRepository.countByStatus(PaymentStatus.NEEDS_REVIEW);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PaymentReviewItem> listPaymentsNeedingReview() {
+        return paymentRepository.findByStatusOrderByUpdatedAtDesc(PaymentStatus.NEEDS_REVIEW).stream()
+                .map(PaymentReviewItem::from)
+                .toList();
+    }
+
+    /**
+     * Returns a dead-lettered payment to the reconciliation queue — used after an operator has
+     * fixed the underlying cause (credentials, provider outage, a data problem).
+     *
+     * <p>The attempt counter is cleared so the row gets a full budget again; leaving it would send
+     * the payment straight back to {@code NEEDS_REVIEW} on the first hiccup.
+     */
+    @Transactional
+    public void requeueForReconciliation(Long paymentId) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> ResourceNotFoundException.of("Payment", paymentId));
+        if (payment.getStatus() != PaymentStatus.NEEDS_REVIEW) {
+            throw new BusinessRuleException(
+                    "Only a payment awaiting review can be requeued (status " + payment.getStatus() + ").");
+        }
+        payment.setStatus(PaymentStatus.INITIATED);
+        payment.setReconcileAttempts(0);
+        payment.setLastReconcileAt(null);
+        payment.setLastReconcileError(null);
+        log.info("Payment {} requeued for reconciliation by an operator.", paymentId);
     }
 
     /**
@@ -482,7 +684,16 @@ public class ReservationService {
     public ReconcileOutcome reconcile(Long paymentId, java.util.Optional<PaymentResult> gatewayResult) {
         Instant now = clock.instant();
         Payment payment = paymentRepository.findById(paymentId).orElse(null);
-        if (payment == null || payment.getStatus() != PaymentStatus.INITIATED) {
+        if (payment == null) {
+            return ReconcileOutcome.NONE;
+        }
+        // Resume a refund that was already decided and claimed but never confirmed — the worker
+        // that owned it died between calling the provider and recording the result. Re-issuing is
+        // safe: the refund carries the same reference, and the provider is idempotent on it.
+        if (payment.getStatus() == PaymentStatus.REFUND_PENDING) {
+            return ReconcileOutcome.refund(payment.getReference());
+        }
+        if (payment.getStatus() != PaymentStatus.INITIATED) {
             return ReconcileOutcome.NONE;
         }
 
@@ -503,13 +714,22 @@ public class ReservationService {
             confirmPaidBooking(booking, payment, reference, now);
             return ReconcileOutcome.NONE;
         }
-        // Charged, but the hold is gone (expired/cancelled) — the job must refund.
+        // Charged, but the hold is gone (expired/cancelled) — a refund is owed. Claim it inside
+        // this transaction before returning the instruction, so no other replica and no later tick
+        // can decide the same refund and issue it twice.
+        payment.setStatus(PaymentStatus.REFUND_PENDING);
+        payment.setReference(reference);
         return ReconcileOutcome.refund(reference);
     }
 
     @Transactional
     public void markRefunded(Long paymentId, String reference) {
         paymentRepository.findById(paymentId).ifPresent(payment -> {
+            // Only the claim can be completed. Anything else means another worker already
+            // finished this refund, so recording it again would be a lie about a second refund.
+            if (payment.getStatus() != PaymentStatus.REFUND_PENDING) {
+                return;
+            }
             payment.setStatus(PaymentStatus.REFUNDED);
             payment.setReference(reference);
             payment.setFailureReason("Refunded: the hold was no longer valid when payment settled.");
@@ -700,7 +920,9 @@ public class ReservationService {
                 .toList();
     }
 
-    @Cacheable(cacheNames = CacheNames.EVENT_SEAT_MAP, key = "#eventId")
+    // sync = true collapses a burst of concurrent misses for the same event into one
+    // loader call per instance; without it every waiting request runs the query itself.
+    @Cacheable(cacheNames = CacheNames.EVENT_SEAT_MAP, key = "#eventId", sync = true)
     @Transactional(readOnly = true)
     public EventSeatMapResponse getSeatMap(Long eventId) {
         Instant now = clock.instant();
@@ -783,7 +1005,9 @@ public class ReservationService {
         return statusBySeat;
     }
 
-    @Cacheable(cacheNames = CacheNames.EVENT_AVAILABILITY, key = "#eventId")
+    // sync = true collapses a burst of concurrent misses for the same event into one
+    // loader call per instance; without it every waiting request runs the query itself.
+    @Cacheable(cacheNames = CacheNames.EVENT_AVAILABILITY, key = "#eventId", sync = true)
     @Transactional(readOnly = true)
     public EventAvailabilityResponse getAvailability(Long eventId) {
         Instant now = clock.instant();

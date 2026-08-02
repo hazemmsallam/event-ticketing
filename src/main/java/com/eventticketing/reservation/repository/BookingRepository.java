@@ -18,6 +18,23 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByStatusAndExpiresAtBefore(BookingStatus status, Instant time);
 
     /**
+     * The caller's still-live hold, if they have one: PENDING_PAYMENT and not yet expired.
+     *
+     * <p>Expiry is evaluated here rather than relying on the sweeper, so a lapsed hold never
+     * blocks a customer from booking again — the same lazy-expiry rule the rest of the service
+     * uses. Backed by {@code idx_booking_customer_status_expiry}.
+     */
+    @Query("""
+            select b
+            from Booking b
+            where b.customerRef = :customerRef
+              and b.status = com.eventticketing.reservation.domain.BookingStatus.PENDING_PAYMENT
+              and b.expiresAt > :now
+            order by b.expiresAt desc
+            """)
+    List<Booking> findActiveHolds(@Param("customerRef") String customerRef, @Param("now") Instant now);
+
+    /**
      * One bounded page of expired holds, oldest first. The sweeper works in batches so a
      * flash-sale expiry wave cannot lock and update thousands of rows in a single transaction.
      */

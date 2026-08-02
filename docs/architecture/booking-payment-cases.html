@@ -1,0 +1,676 @@
+<title>Booking &amp; Payment — Complete Case Reference</title>
+
+<style>
+  :root {
+    color-scheme: light;
+    --paper:#EFF2F5; --surface:#FFFFFF; --sheet:#F7F9FB;
+    --ink:#16202B; --ink-2:#4A5C6E; --ink-3:#6E8095;
+    --rule:#C7D2DC; --rule-soft:#DDE5EC;
+    --accent:#A85D00; --accent-bg:#F7EAD8;
+    --good:#1B6E4B; --good-bg:#E4F1EA;
+    --warn:#8A6100; --warn-bg:#FAF0DC;
+    --crit:#A32B22; --crit-bg:#F7E4E2;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,"Helvetica Neue",sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","Segoe UI Mono",Menlo,Consolas,monospace;
+    --measure:72ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme:dark;
+      --paper:#0D131A; --surface:#141D26; --sheet:#EEF2F5;
+      --ink:#E3EAF1; --ink-2:#9BAABA; --ink-3:#7A8B9C;
+      --rule:#25323E; --rule-soft:#1D2833;
+      --accent:#E8A44B; --accent-bg:#2A2115;
+      --good:#55B27E; --good-bg:#16271F;
+      --warn:#D9A548; --warn-bg:#272016;
+      --crit:#E8776B; --crit-bg:#2B1B19; }
+  }
+  :root[data-theme="dark"] { color-scheme:dark;
+    --paper:#0D131A; --surface:#141D26; --sheet:#EEF2F5;
+    --ink:#E3EAF1; --ink-2:#9BAABA; --ink-3:#7A8B9C;
+    --rule:#25323E; --rule-soft:#1D2833;
+    --accent:#E8A44B; --accent-bg:#2A2115;
+    --good:#55B27E; --good-bg:#16271F; --warn:#D9A548; --warn-bg:#272016;
+    --crit:#E8776B; --crit-bg:#2B1B19; }
+  :root[data-theme="light"] { color-scheme:light;
+    --paper:#EFF2F5; --surface:#FFFFFF; --sheet:#F7F9FB;
+    --ink:#16202B; --ink-2:#4A5C6E; --ink-3:#6E8095;
+    --rule:#C7D2DC; --rule-soft:#DDE5EC;
+    --accent:#A85D00; --accent-bg:#F7EAD8;
+    --good:#1B6E4B; --good-bg:#E4F1EA; --warn:#8A6100; --warn-bg:#FAF0DC;
+    --crit:#A32B22; --crit-bg:#F7E4E2; }
+
+  .doc { background:var(--paper); color:var(--ink); font-family:var(--sans);
+         font-size:16px; line-height:1.65; padding:0 0 5rem; }
+  .doc *,.doc *::before,.doc *::after { box-sizing:border-box; }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 1.5rem; }
+
+  .titleblock { border:1px solid var(--rule); background:var(--surface);
+                margin:2.5rem 0 3rem; display:grid; grid-template-columns:1fr auto; }
+  .titleblock > div { padding:1.5rem 1.75rem; }
+  .tb-main { border-right:1px solid var(--rule); }
+  .eyebrow { font-family:var(--mono); font-size:.7rem; letter-spacing:.16em;
+             text-transform:uppercase; color:var(--accent); margin:0 0 .6rem; }
+  .titleblock h1 { font-size:clamp(1.6rem,3.4vw,2.35rem); line-height:1.15;
+                   letter-spacing:-.022em; margin:0 0 .7rem; text-wrap:balance; font-weight:620; }
+  .tb-sub { color:var(--ink-2); margin:0; max-width:58ch; }
+  .tb-meta { font-family:var(--mono); font-size:.74rem; line-height:1.9; color:var(--ink-2); white-space:nowrap; }
+  .tb-meta b { font-weight:600; display:block; font-size:.66rem; letter-spacing:.12em;
+               text-transform:uppercase; color:var(--ink-3); }
+
+  .shell { display:grid; grid-template-columns:210px minmax(0,1fr); gap:3.5rem; align-items:start; }
+  .toc { position:sticky; top:1.5rem; font-family:var(--mono); font-size:.76rem; }
+  .toc h2 { font-size:.66rem; letter-spacing:.14em; text-transform:uppercase;
+            color:var(--ink-3); margin:0 0 .85rem; font-weight:600; }
+  .toc ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.1rem; }
+  .toc a { display:flex; gap:.6rem; padding:.32rem .4rem; color:var(--ink-2);
+           text-decoration:none; border-left:2px solid transparent; }
+  .toc a:hover { color:var(--accent); border-left-color:var(--accent); background:var(--rule-soft); }
+  .toc a .n { color:var(--ink-3); }
+
+  main { min-width:0; }
+  section { margin:0 0 3.5rem; scroll-margin-top:1.5rem; }
+  h2.sec { display:flex; align-items:baseline; gap:.8rem; font-size:1.32rem; letter-spacing:-.015em;
+           margin:0 0 .3rem; padding-bottom:.7rem; border-bottom:1px solid var(--rule);
+           text-wrap:balance; font-weight:620; }
+  h2.sec .n { font-family:var(--mono); font-size:.82rem; color:var(--accent); letter-spacing:.06em; flex:none; }
+  h3 { font-size:1rem; margin:2rem 0 .5rem; letter-spacing:-.01em; font-weight:620; }
+  p,li { max-width:var(--measure); }
+  p { margin:.85rem 0; }
+  ul { padding-left:1.15rem; margin:.85rem 0; }
+  li { margin:.3rem 0; }
+  code { font-family:var(--mono); font-size:.855em; background:var(--rule-soft);
+         padding:.1em .38em; border-radius:3px; }
+  a { color:var(--accent); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  .note { border-left:3px solid var(--accent); background:var(--accent-bg);
+          padding:.9rem 1.1rem; margin:1.4rem 0; max-width:var(--measure); }
+  .note.crit { border-left-color:var(--crit); background:var(--crit-bg); }
+  .note.good { border-left-color:var(--good); background:var(--good-bg); }
+  .note p { margin:.35rem 0; }
+  .note .lbl { font-family:var(--mono); font-size:.68rem; letter-spacing:.13em; text-transform:uppercase;
+               color:var(--accent); display:block; margin-bottom:.35rem; }
+  .note.crit .lbl { color:var(--crit); }
+  .note.good .lbl { color:var(--good); }
+
+  figure.sheet { margin:1.75rem 0; background:var(--sheet); border:1px solid var(--rule); color-scheme:light; }
+  figure.sheet .body { overflow-x:auto; padding:1.5rem; }
+  figure.sheet pre.mermaid { margin:0; background:none; padding:0; min-width:520px; }
+  figure.sheet figcaption { font-family:var(--mono); font-size:.7rem; letter-spacing:.1em;
+    text-transform:uppercase; color:#5A6B7C; padding:.65rem 1rem; border-top:1px solid #D6DEE6;
+    display:flex; justify-content:space-between; gap:1rem; }
+  figure.sheet figcaption .id { color:#92693A; }
+
+  .tw { overflow-x:auto; margin:1.4rem 0; border:1px solid var(--rule); background:var(--surface); }
+  table { border-collapse:collapse; width:100%; font-size:.86rem; min-width:560px; }
+  th,td { text-align:left; padding:.55rem .8rem; border-bottom:1px solid var(--rule-soft); vertical-align:top; }
+  th { font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase;
+       color:var(--ink-3); font-weight:600; border-bottom:1px solid var(--rule); white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:none; }
+  td.mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  .pill { font-family:var(--mono); font-size:.7rem; font-weight:700; padding:.12em .5em;
+          border-radius:3px; white-space:nowrap; display:inline-block; }
+  .p-ok   { color:var(--good); background:var(--good-bg); }
+  .p-warn { color:var(--warn); background:var(--warn-bg); }
+  .p-err  { color:var(--crit); background:var(--crit-bg); }
+
+  @media (max-width:900px) {
+    .shell { grid-template-columns:1fr; gap:2rem; }
+    .toc { position:static; border-bottom:1px solid var(--rule); padding-bottom:1rem; }
+    .toc ol { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+    .titleblock { grid-template-columns:1fr; }
+    .tb-main { border-right:none; border-bottom:1px solid var(--rule); }
+  }
+  @media (prefers-reduced-motion:reduce) { .doc * { transition:none !important; } }
+</style>
+
+<div class="doc">
+<div class="wrap">
+
+  <header class="titleblock">
+    <div class="tb-main">
+      <p class="eyebrow">Case Reference</p>
+      <h1>Booking &amp; Payment — every outcome</h1>
+      <p class="tb-sub">Every branch a hold or a charge can take: the successes, the rejections,
+        and the four crash windows where money and inventory can disagree — including what recovers
+        each one.</p>
+    </div>
+    <div class="tb-meta">
+      <b>Endpoints</b>/api/bookings
+      <b>Cases</b>38 enumerated
+      <b>Diagrams</b>6 · Mermaid
+      <b>Source</b>ReservationService · PaymentService
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="toc" aria-label="Section index">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s0"><span class="n">00</span> How to read this</a></li>
+        <li><a href="#s1"><span class="n">01</span> Guards &amp; routing</a></li>
+        <li><a href="#s2"><span class="n">02</span> Seated holds</a></li>
+        <li><a href="#s3"><span class="n">03</span> General admission</a></li>
+        <li><a href="#s4"><span class="n">04</span> Hold lifecycle</a></li>
+        <li><a href="#s5"><span class="n">05</span> Payment · happy path</a></li>
+        <li><a href="#s6"><span class="n">06</span> Payment · rejections</a></li>
+        <li><a href="#s7"><span class="n">07</span> The four crash windows</a></li>
+        <li><a href="#s8"><span class="n">08</span> Charged, no seats</a></li>
+        <li><a href="#s9"><span class="n">09</span> Reconciliation</a></li>
+        <li><a href="#s10"><span class="n">10</span> Status reference</a></li>
+        <li><a href="#s11"><span class="n">11</span> Guarantees &amp; gaps</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+    <section id="s0">
+      <h2 class="sec"><span class="n">00</span> How to read this</h2>
+      <p>A purchase crosses two systems that can fail independently: <strong>inventory</strong> (the
+        database) and <strong>money</strong> (the payment provider). Every interesting case in this
+        document is a disagreement between them.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Inventory</th><th>Money</th><th>Meaning</th><th>Resolution</th></tr></thead>
+          <tbody>
+            <tr><td>Held</td><td>Not charged</td><td>Normal pending state</td><td>Pay, cancel, or expire</td></tr>
+            <tr><td>Held</td><td>Charged</td><td>Confirm it</td><td>Booking becomes CONFIRMED</td></tr>
+            <tr><td><strong>Gone</strong></td><td><strong>Charged</strong></td><td><strong>The dangerous one</strong></td><td>Automatic refund</td></tr>
+            <tr><td>Held</td><td>Unknown</td><td>In doubt after a crash</td><td>Reconciliation resolves</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Two design rules make all of this recoverable, and every case below depends on them:</p>
+      <ul>
+        <li><strong>A durable record of intent exists before any money moves.</strong> The
+          <code>Payment</code> row is written as <code>INITIATED</code> and committed <em>before</em>
+          the gateway is called, so a charge can always be traced back to something.</li>
+        <li><strong>No database transaction is open during the charge.</strong> The process may die
+          at any instant without holding locks — and whatever it was doing is reconstructable.</li>
+      </ul>
+    </section>
+
+    <section id="s1">
+      <h2 class="sec"><span class="n">01</span> Creating a hold — guards &amp; routing</h2>
+      <p>Seven guards run before any inventory is touched. They are ordered cheapest-first, so an
+        abusive request is rejected without ever reaching the database.</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart TD
+    S(["POST /api/bookings"]) --&gt; A{Authorization header}
+    A --&gt;|missing| E1["401 Unauthorized"]
+    A --&gt;|present| V{"Payload valid?&lt;br/&gt;seats ≤ 10 · qty 1–10"}
+    V --&gt;|no| E2["400 Validation failed"]
+    V --&gt;|yes| T{"Unpaid-hold budget?"}
+    T --&gt;|exhausted| E3["429 + Retry-After"]
+    T --&gt;|ok| EV{"Event exists?"}
+    EV --&gt;|no| E4["404 Event not found"]
+    EV --&gt;|yes| P{"Status = PUBLISHED?"}
+    P --&gt;|DRAFT · CANCELLED · SOLD_OUT| E5["400 Not open for booking"]
+    P --&gt;|yes| Q{"Caller already&lt;br/&gt;holds seats?"}
+    Q --&gt;|yes| E6["409 Finish existing hold"]
+    Q --&gt;|no| R{"Request shape"}
+    R --&gt;|seatIds| SEATED["Seated path — §02"]
+    R --&gt;|sectionId + quantity| GA["General admission — §03"]
+    R --&gt;|neither · non-seated hall| LEG["Legacy whole-event GA — §03"]
+    R --&gt;|neither · seated hall| E7["400 Provide seatIds or sectionId"]
+</pre>
+        </div>
+        <figcaption><span>Guard order and routing</span><span class="id">FIG-01</span></figcaption>
+      </figure>
+
+      <div class="note">
+        <span class="lbl">Routing is by request, not by hall</span>
+        <p>A hall can mix seated and general-admission sections in the same room, so the decision is
+          made from what the client asked for — not from <code>hall.isSeated</code>.</p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>Case</th><th>Status</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">1</td><td>No <code>Authorization</code> header</td><td><span class="pill p-err">401</span></td><td>Identity is never read from the body</td></tr>
+            <tr><td class="mono">2</td><td>More than 10 seats, or quantity outside 1–10</td><td><span class="pill p-err">400</span></td><td>Bean validation, before any work</td></tr>
+            <tr><td class="mono">3</td><td>Too many unpaid holds in the window</td><td><span class="pill p-err">429</span></td><td><code>Retry-After</code> set; paying clears the tally</td></tr>
+            <tr><td class="mono">4</td><td>Event id unknown</td><td><span class="pill p-err">404</span></td><td></td></tr>
+            <tr><td class="mono">5</td><td>Event not PUBLISHED</td><td><span class="pill p-err">400</span></td><td>Covers DRAFT, CANCELLED, SOLD_OUT</td></tr>
+            <tr><td class="mono">6</td><td>Caller already has a live hold</td><td><span class="pill p-err">409</span></td><td>Expired holds don't count</td></tr>
+            <tr><td class="mono">7</td><td>Seated hall, no seats or section given</td><td><span class="pill p-err">400</span></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s2">
+      <h2 class="sec"><span class="n">02</span> Seated holds</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart TD
+    S(["seatIds supplied"]) --&gt; D{"Duplicate ids?"}
+    D --&gt;|yes| E1["400 Duplicate seat ids"]
+    D --&gt;|no| M{"Within max per booking?"}
+    M --&gt;|no| E2["400 Too many seats"]
+    M --&gt;|yes| REL["Release expired holds&lt;br/&gt;for this event · FLUSH"]
+    REL --&gt; EX{"All seat ids exist?"}
+    EX --&gt;|no| E3["404 Seat not found"]
+    EX --&gt;|yes| H{"All in this hall?"}
+    H --&gt;|no| E4["400 Seat not in hall"]
+    H --&gt;|yes| PRE{"Pre-check:&lt;br/&gt;already HELD or BOOKED?"}
+    PRE --&gt;|yes| E5["409 Names the taken seats"]
+    PRE --&gt;|no| INS["INSERT booking_seat rows&lt;br/&gt;seat ids sorted"]
+    INS --&gt; UQ{"uq_booking_seat_active"}
+    UQ --&gt;|duplicate key| E6["409 Just taken"]
+    UQ --&gt;|accepted| OK["201 · PENDING_PAYMENT&lt;br/&gt;seats HELD · expires in 10 min"]
+</pre>
+        </div>
+        <figcaption><span>Seated hold, including the race</span><span class="id">FIG-02</span></figcaption>
+      </figure>
+
+      <div class="note crit">
+        <span class="lbl">The pre-check is cosmetic — the index decides</span>
+        <p>Two customers can both pass the “already held?” pre-check. The unique index on the
+          generated <code>active_lock</code> column is what actually resolves the race, and the loser
+          surfaces as case&nbsp;6 rather than an overselling bug. Removing the pre-check would change
+          only the quality of the error message, not the correctness.</p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>Case</th><th>Status</th><th>Inventory effect</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">8</td><td>Duplicate seat ids in the request</td><td><span class="pill p-err">400</span></td><td>None</td></tr>
+            <tr><td class="mono">9</td><td>Above <code>max-seats-per-booking</code></td><td><span class="pill p-err">400</span></td><td>None</td></tr>
+            <tr><td class="mono">10</td><td>A seat id does not exist</td><td><span class="pill p-err">404</span></td><td>None</td></tr>
+            <tr><td class="mono">11</td><td>Seat belongs to another hall</td><td><span class="pill p-err">400</span></td><td>None</td></tr>
+            <tr><td class="mono">12</td><td>Seat already held or sold (pre-check)</td><td><span class="pill p-err">409</span></td><td>None — lists the seats</td></tr>
+            <tr><td class="mono">13</td><td>Lost the race at the unique index</td><td><span class="pill p-err">409</span></td><td>Rolled back entirely</td></tr>
+            <tr><td class="mono">14</td><td>Success</td><td><span class="pill p-ok">201</span></td><td>Seats <code>HELD</code>, cache evicted after commit</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s3">
+      <h2 class="sec"><span class="n">03</span> General admission</h2>
+      <p>GA tickets have no identity, so uniqueness cannot protect them. Capacity is counted under a
+        pessimistic row lock instead — on the <strong>section</strong>, so other sections of the same
+        event keep selling in parallel.</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart TD
+    S(["sectionId + quantity"]) --&gt; QC{"Quantity ≥ 1&lt;br/&gt;and within max?"}
+    QC --&gt;|no| E1["400 Bad quantity"]
+    QC --&gt;|yes| SE{"Section exists?"}
+    SE --&gt;|no| E2["404 Section not found"]
+    SE --&gt;|yes| SH{"Belongs to this hall?"}
+    SH --&gt;|no| E3["400 Wrong hall"]
+    SH --&gt;|yes| MODE{"Mode = GENERAL_ADMISSION?"}
+    MODE --&gt;|SEATED| E4["400 Pick individual seats"]
+    MODE --&gt;|yes| CAP{"Capacity configured?"}
+    CAP --&gt;|null| E5["400 No capacity set"]
+    CAP --&gt;|yes| LOCK["SELECT section FOR UPDATE&lt;br/&gt;release expired · FLUSH"]
+    LOCK --&gt; AVAIL{"capacity − confirmed − held&lt;br/&gt;≥ quantity?"}
+    AVAIL --&gt;|no| E6["409 Only N left"]
+    AVAIL --&gt;|yes| PRICE{"Event prices this section?"}
+    PRICE --&gt;|no| E7["400 No price configured"]
+    PRICE --&gt;|yes| OK["201 · PENDING_PAYMENT&lt;br/&gt;quantity reserved"]
+</pre>
+        </div>
+        <figcaption><span>General-admission hold</span><span class="id">FIG-03</span></figcaption>
+      </figure>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>Case</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">15</td><td>Quantity missing, zero, or above the cap</td><td><span class="pill p-err">400</span></td></tr>
+            <tr><td class="mono">16</td><td>Section not found</td><td><span class="pill p-err">404</span></td></tr>
+            <tr><td class="mono">17</td><td>Section belongs to a different hall</td><td><span class="pill p-err">400</span></td></tr>
+            <tr><td class="mono">18</td><td>Section is SEATED, not GA</td><td><span class="pill p-err">400</span></td></tr>
+            <tr><td class="mono">19</td><td>Section has no configured capacity</td><td><span class="pill p-err">400</span></td></tr>
+            <tr><td class="mono">20</td><td>Not enough capacity left</td><td><span class="pill p-err">409</span></td></tr>
+            <tr><td class="mono">21</td><td>Event has no price line for the section</td><td><span class="pill p-err">400</span></td></tr>
+            <tr><td class="mono">22</td><td>Success</td><td><span class="pill p-ok">201</span></td></tr>
+            <tr><td class="mono">23</td><td>Legacy path: non-seated hall, no section — same rules against <code>event.max_capacity</code>, locking the event row</td><td><span class="pill p-ok">201</span> / <span class="pill p-err">409</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s4">
+      <h2 class="sec"><span class="n">04</span> Hold lifecycle</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --&gt; PENDING_PAYMENT : hold created, expires_at = now + 10 min
+    PENDING_PAYMENT --&gt; CONFIRMED : payment succeeded
+    PENDING_PAYMENT --&gt; CANCELLED : customer DELETEs the hold
+    PENDING_PAYMENT --&gt; EXPIRED : timer lapsed
+    PENDING_PAYMENT --&gt; PENDING_PAYMENT : changeSeats — swaps seats, resets timer
+    CONFIRMED --&gt; [*] : tickets issued
+    CANCELLED --&gt; [*] : seats RELEASED
+    EXPIRED --&gt; [*] : seats RELEASED
+
+    note right of PENDING_PAYMENT
+        Expiry is evaluated on read.
+        A lapsed hold is treated as free
+        by the next booking, whether or
+        not the sweeper has run.
+    end note
+    note right of CONFIRMED
+        Terminal. There is currently no
+        path back — see §11.
+    end note
+</pre>
+        </div>
+        <figcaption><span>Booking states and their exits</span><span class="id">FIG-04</span></figcaption>
+      </figure>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>Exit</th><th>Trigger</th><th>Seats become</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">24</td><td>CONFIRMED</td><td>Successful payment</td><td><code>BOOKED</code></td></tr>
+            <tr><td class="mono">25</td><td>CANCELLED</td><td><code>DELETE /api/bookings/{id}</code></td><td><code>RELEASED</code> immediately</td></tr>
+            <tr><td class="mono">26</td><td>EXPIRED · lazily</td><td>Next booking on that event</td><td><code>RELEASED</code> in that transaction</td></tr>
+            <tr><td class="mono">27</td><td>EXPIRED · swept</td><td>Scheduled job, batched</td><td><code>RELEASED</code></td></tr>
+            <tr><td class="mono">28</td><td>Seats swapped</td><td><code>PUT /{id}/seats</code></td><td>Old released, new held, total re-priced</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Cancelling anything other than a <code>PENDING_PAYMENT</code> booking is rejected with
+        <span class="pill p-err">400</span>, and acting on someone else's booking returns
+        <span class="pill p-err">404</span> rather than 403 — so booking ids cannot be probed.</p>
+    </section>
+
+    <section id="s5">
+      <h2 class="sec"><span class="n">05</span> Payment — the happy path</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor U as Customer
+    participant PS as PaymentService
+    participant RS as ReservationService
+    participant DB as Database
+    participant GW as Gateway
+
+    U-&gt;&gt;PS: POST /api/bookings/{id}/payment
+    Note over PS,DB: TXN 1 — claim intent
+    PS-&gt;&gt;RS: beginPayment
+    RS-&gt;&gt;DB: hold valid? amount re-read? key for this attempt
+    RS-&gt;&gt;DB: Payment = INITIATED
+    RS--&gt;&gt;PS: context {paymentId, amount, idempotencyKey}
+
+    Note over PS,GW: NO TRANSACTION OPEN
+    PS-&gt;&gt;GW: charge(amount, idempotencyKey)
+    GW--&gt;&gt;PS: success + reference
+
+    Note over PS,DB: TXN 2 — record the reference on its own
+    PS-&gt;&gt;RS: recordChargeIssued
+    RS-&gt;&gt;DB: payment.reference = ref
+
+    Note over PS,DB: TXN 3 — apply the outcome
+    PS-&gt;&gt;RS: applyPaymentResult
+    RS-&gt;&gt;DB: payment SUCCEEDED · booking CONFIRMED
+    RS-&gt;&gt;DB: seats HELD to BOOKED · tickets issued
+    RS-&gt;&gt;DB: sold-out check · cache evicted after commit
+    RS--&gt;&gt;U: 200 Confirmed
+</pre>
+        </div>
+        <figcaption><span>Successful purchase</span><span class="id">FIG-05</span></figcaption>
+      </figure>
+
+      <div class="note good">
+        <span class="lbl">Why the reference gets its own transaction</span>
+        <p><code>applyPaymentResult</code> deliberately rolls back when the hold has lapsed. A
+          reference written inside it would be discarded in exactly the case where reconciliation
+          needs it to issue a refund — so it is committed separately, first.</p>
+      </div>
+    </section>
+
+    <section id="s6">
+      <h2 class="sec"><span class="n">06</span> Payment — rejections before any charge</h2>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>Case</th><th>Status</th><th>What the customer should do</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">29</td><td>Booking not found, or not theirs</td><td><span class="pill p-err">404</span></td><td>—</td></tr>
+            <tr><td class="mono">30</td><td>Booking already CONFIRMED</td><td><span class="pill p-err">400</span></td><td>Nothing — already paid</td></tr>
+            <tr><td class="mono">31</td><td>Booking EXPIRED or CANCELLED</td><td><span class="pill p-err">400</span></td><td>Start a new booking</td></tr>
+            <tr><td class="mono">32</td><td>Hold lapsed between opening and paying</td><td><span class="pill p-err">400</span></td><td>Start a new booking</td></tr>
+            <tr><td class="mono">33</td><td>Payment already SUCCEEDED</td><td><span class="pill p-err">400</span></td><td>Nothing</td></tr>
+            <tr><td class="mono">34</td><td>A payment is <strong>in doubt</strong> (INITIATED)</td><td><span class="pill p-err">409</span></td><td><strong>Wait and refresh</strong> — not an error</td></tr>
+            <tr><td class="mono">35</td><td>Two concurrent pay calls; loser hits the unique index</td><td><span class="pill p-err">409</span></td><td>Wait and refresh</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <span class="lbl">Case 34 deserves the right wording in the UI</span>
+        <p>A 409 here means “we may already hold a charge for you and are still confirming it”. Retrying
+          is refused on purpose: issuing a new idempotency key while the previous attempt is unresolved
+          would orphan a charge the gateway may already have taken. Present it as
+          <em>“payment processing — check back shortly”</em>, never as a failure.</p>
+      </div>
+
+      <h3>Retry after a genuine decline</h3>
+      <p>A <code>FAILED</code> payment can be retried, and the attempt counter advances so the gateway
+        issues a real second charge rather than replaying the stored decline:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Attempt</th><th>Idempotency key</th><th>Outcome</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">1</td><td class="mono">booking-42-1</td><td>Declined → <code>FAILED</code></td></tr>
+            <tr><td class="mono">2</td><td class="mono">booking-42-2</td><td>New card charged → <code>SUCCEEDED</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s7">
+      <h2 class="sec"><span class="n">07</span> The four crash windows</h2>
+      <p>These are the cases the architecture exists for: the process, network, or database fails
+        while a charge is in flight.</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant PS as PaymentService
+    participant DB as Database
+    participant GW as Gateway
+    participant RC as Reconciler
+
+    PS-&gt;&gt;DB: Payment = INITIATED (committed)
+    Note over PS,DB: WINDOW A — crash here&lt;br/&gt;no charge exists · reconciler marks FAILED
+
+    PS-&gt;&gt;GW: charge(...)
+    Note over PS,GW: WINDOW B — timeout or exception&lt;br/&gt;outcome unknown · stays INITIATED
+
+    GW--&gt;&gt;PS: success + reference
+    Note over PS,DB: WINDOW C — crash before recording&lt;br/&gt;charge exists, unrecorded
+
+    PS-&gt;&gt;DB: reference recorded
+    PS-&gt;&gt;DB: apply outcome
+    Note over PS,DB: WINDOW D — hold lapsed during the charge&lt;br/&gt;rollback keeps INITIATED
+
+    RC-&gt;&gt;GW: lookup(idempotencyKey)
+    RC-&gt;&gt;DB: confirm · fail · or refund
+</pre>
+        </div>
+        <figcaption><span>Where a purchase can break, and what recovers it</span><span class="id">FIG-06</span></figcaption>
+      </figure>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>Window</th><th>Money</th><th>Immediate response</th><th>Recovery</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">36</td><td><strong>A</strong> — died before charging</td><td>None taken</td><td>Connection dropped</td><td>Reconciler finds no charge → <code>FAILED</code>; the hold expires normally</td></tr>
+            <tr><td class="mono">37</td><td><strong>B</strong> — gateway timed out</td><td><strong>Unknown</strong></td><td><span class="pill p-warn">“Still processing”</span></td><td>Reconciler looks up the key → confirms or fails accordingly</td></tr>
+            <tr><td class="mono">38</td><td><strong>C</strong> — died after charging</td><td><strong>Taken</strong></td><td>Connection dropped</td><td>Reconciler finds the charge and confirms the booking</td></tr>
+            <tr><td class="mono">39</td><td><strong>D</strong> — hold lapsed mid-charge</td><td><strong>Taken</strong></td><td><span class="pill p-err">409</span> “will be refunded”</td><td>Reconciler <strong>refunds</strong> — see §08</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note good">
+        <span class="lbl">Why nothing is lost</span>
+        <p>Every window leaves the payment row <code>INITIATED</code>. That single state means “a charge
+          may exist that we have not accounted for”, and it is the reconciler's entire work queue.</p>
+      </div>
+    </section>
+
+    <section id="s8">
+      <h2 class="sec"><span class="n">08</span> Charged, but the seats are gone</h2>
+      <p>The case worth understanding in full: the customer's card was charged, and between starting
+        payment and finishing it their hold expired — or the seats were released and resold.</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor U as Customer
+    participant PS as PaymentService
+    participant DB as Database
+    participant GW as Gateway
+    participant RC as Reconciler
+
+    U-&gt;&gt;PS: pay
+    PS-&gt;&gt;DB: Payment INITIATED (hold valid at this moment)
+    PS-&gt;&gt;GW: charge
+    Note over U,DB: meanwhile the 10-minute hold lapses&lt;br/&gt;another customer takes the seats
+    GW--&gt;&gt;PS: success + reference
+    PS-&gt;&gt;DB: reference recorded (separate txn — survives)
+    PS-&gt;&gt;DB: applyPaymentResult
+    DB--&gt;&gt;PS: hold no longer valid
+    PS--xDB: THROW — rollback, payment stays INITIATED
+    PS--&gt;&gt;U: 409 "the charge will be refunded shortly"
+
+    Note over RC,GW: within a minute
+    RC-&gt;&gt;GW: lookup(key) — charge confirmed real
+    RC-&gt;&gt;DB: booking not PENDING → refund required
+    RC-&gt;&gt;GW: refund(reference)
+    RC-&gt;&gt;DB: Payment = REFUNDED
+</pre>
+        </div>
+        <figcaption><span>The compensating transaction</span><span class="id">FIG-07</span></figcaption>
+      </figure>
+
+      <div class="note crit">
+        <span class="lbl">The throw is the mechanism, not a bug</span>
+        <p>Rolling back is what preserves <code>INITIATED</code> so the reconciler can see the payment
+          and refund it. A well-meaning change that “handles the error gracefully” instead of throwing
+          would mark the payment resolved and <strong>strand a real charge</strong> — the customer's
+          money kept, with no seats and no refund.</p>
+      </div>
+
+      <p>The seats are never double-sold in this scenario: they were released by expiry and legitimately
+        resold. Inventory stays correct; only the money needs unwinding, which is why a refund — not a
+        seat clawback — is the right compensation.</p>
+    </section>
+
+    <section id="s9">
+      <h2 class="sec"><span class="n">09</span> Reconciliation</h2>
+      <p>Runs every 30 seconds over payments left <code>INITIATED</code> for more than a minute.
+        The gateway lookup happens <em>outside</em> the transaction, and refunds are returned as an
+        instruction to the job rather than performed inside it.</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart TD
+    S(["Payment INITIATED &gt; 1 min"]) --&gt; L["lookup(idempotencyKey) — no txn"]
+    L --&gt; G{"Charge found&lt;br/&gt;and successful?"}
+    G --&gt;|no| F["Payment = FAILED&lt;br/&gt;no money was taken"]
+    G --&gt;|yes| B{"Booking state"}
+    B --&gt;|CONFIRMED already| S1["Payment = SUCCEEDED&lt;br/&gt;idempotent catch-up"]
+    B --&gt;|PENDING and not expired| S2["Confirm booking&lt;br/&gt;seats BOOKED · tickets issued"]
+    B --&gt;|EXPIRED or CANCELLED| S3["Refund at the gateway&lt;br/&gt;Payment = REFUNDED"]
+</pre>
+        </div>
+        <figcaption><span>Reconciliation decision tree</span><span class="id">FIG-08</span></figcaption>
+      </figure>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>Gateway says</th><th>Booking is</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">40</td><td>No charge / failed</td><td>any</td><td><code>FAILED</code> — nothing was taken</td></tr>
+            <tr><td class="mono">41</td><td>Charged</td><td>CONFIRMED</td><td>Mark <code>SUCCEEDED</code>; the normal path already won</td></tr>
+            <tr><td class="mono">42</td><td>Charged</td><td>PENDING, still valid</td><td><strong>Confirm the booking</strong> — crash recovery</td></tr>
+            <tr><td class="mono">43</td><td>Charged</td><td>EXPIRED / CANCELLED</td><td><strong>Refund</strong></td></tr>
+            <tr><td class="mono">44</td><td>Payment no longer INITIATED</td><td>—</td><td>No-op; another run resolved it</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Confirmation is idempotent throughout: ticket generation no-ops when tickets exist, so a
+        booking confirmed twice by two runs still issues exactly one set.</p>
+    </section>
+
+    <section id="s10">
+      <h2 class="sec"><span class="n">10</span> Status code reference</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Status</th><th>Means</th><th>Client should</th></tr></thead>
+          <tbody>
+            <tr><td><span class="pill p-ok">201</span></td><td>Hold created</td><td>Show the countdown, offer payment</td></tr>
+            <tr><td><span class="pill p-ok">200</span></td><td>Payment confirmed</td><td>Show tickets</td></tr>
+            <tr><td><span class="pill p-err">400</span></td><td>Invalid request or wrong state</td><td>Fix input, or start a new booking</td></tr>
+            <tr><td><span class="pill p-err">401</span></td><td>No credential</td><td>Authenticate</td></tr>
+            <tr><td><span class="pill p-err">404</span></td><td>Not found, or not yours</td><td>Refresh the list</td></tr>
+            <tr><td><span class="pill p-err">409</span></td><td>Someone else won, or work is in flight</td><td><strong>Refresh</strong> — for payment, wait and re-check</td></tr>
+            <tr><td><span class="pill p-warn">429</span></td><td>Too many unpaid holds</td><td>Honour <code>Retry-After</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s11">
+      <h2 class="sec"><span class="n">11</span> Guarantees &amp; known gaps</h2>
+
+      <h3>What the system guarantees</h3>
+      <ul>
+        <li><strong>A seat is never sold twice.</strong> Enforced by a unique index, not by application logic.</li>
+        <li><strong>A charge is never silently lost.</strong> Every failure leaves a durable
+          <code>INITIATED</code> row for the reconciler.</li>
+        <li><strong>Money is never kept without seats.</strong> A charge that cannot be honoured is refunded.</li>
+        <li><strong>Abandoned holds always return to sale</strong>, via lazy release or the sweeper.</li>
+        <li><strong>Confirmation is idempotent</strong>, so recovery can run repeatedly without side effects.</li>
+      </ul>
+
+      <h3>Known gaps</h3>
+      <div class="note crit">
+        <span class="lbl">Carry these into planning</span>
+        <p><strong>No refund path after confirmation.</strong> <code>CONFIRMED</code> is terminal:
+          cancelling is rejected, seats cannot be returned to the pool, and an event marked
+          <code>SOLD_OUT</code> never returns to <code>PUBLISHED</code>.</p>
+        <p><strong>Reconciliation has no dead letter.</strong> A payment that keeps failing to reconcile
+          retries forever, logging each time, with no alert and no manual-review state.</p>
+        <p><strong>Refunds are assumed synchronous and successful.</strong> The gateway contract returns
+          <code>void</code>, so a refund that fails or settles asynchronously is recorded as done.</p>
+        <p><strong>Charging assumes a terminal answer inline.</strong> Real 3-D Secure needs a webhook and
+          an intermediate “authentication required” state, which does not exist yet.</p>
+      </div>
+    </section>
+
+    </main>
+  </div>
+</div>
+</div>

@@ -1,0 +1,779 @@
+<title>Journey Booking &amp; Seat Reservation — Architecture Blueprint</title>
+
+<style>
+  :root {
+    color-scheme: light;
+    --paper:      #EFF2F5;
+    --surface:    #FFFFFF;
+    --sheet:      #F7F9FB;
+    --ink:        #16202B;
+    --ink-2:      #4A5C6E;
+    --ink-3:      #6E8095;
+    --rule:       #C7D2DC;
+    --rule-soft:  #DDE5EC;
+    --accent:     #A85D00;
+    --accent-bg:  #F7EAD8;
+    --good:       #1B6E4B;
+    --good-bg:    #E1F0E8;
+    --crit:       #A32B22;
+    --crit-bg:    #F7E4E2;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", Menlo, Consolas, monospace;
+    --measure: 72ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --paper:     #0D131A;
+      --surface:   #141D26;
+      --sheet:     #EEF2F5;
+      --ink:       #E3EAF1;
+      --ink-2:     #9BAABA;
+      --ink-3:     #7A8B9C;
+      --rule:      #25323E;
+      --rule-soft: #1D2833;
+      --accent:    #E8A44B;
+      --accent-bg: #2A2115;
+      --good:      #55B27E;
+      --good-bg:   #16271F;
+      --crit:      #E8776B;
+      --crit-bg:   #2B1B19;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0D131A; --surface: #141D26; --sheet: #EEF2F5;
+    --ink: #E3EAF1; --ink-2: #9BAABA; --ink-3: #7A8B9C;
+    --rule: #25323E; --rule-soft: #1D2833;
+    --accent: #E8A44B; --accent-bg: #2A2115;
+    --good: #55B27E; --good-bg: #16271F; --crit: #E8776B; --crit-bg: #2B1B19;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --paper: #EFF2F5; --surface: #FFFFFF; --sheet: #F7F9FB;
+    --ink: #16202B; --ink-2: #4A5C6E; --ink-3: #6E8095;
+    --rule: #C7D2DC; --rule-soft: #DDE5EC;
+    --accent: #A85D00; --accent-bg: #F7EAD8;
+    --good: #1B6E4B; --good-bg: #E1F0E8; --crit: #A32B22; --crit-bg: #F7E4E2;
+  }
+
+  .doc { background: var(--paper); color: var(--ink); font-family: var(--sans);
+         font-size: 16px; line-height: 1.65; padding: 0 0 5rem; }
+  .doc *, .doc *::before, .doc *::after { box-sizing: border-box; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* Title block — a drafting sheet header */
+  .titleblock { border: 1px solid var(--rule); background: var(--surface);
+                margin: 2.5rem 0 3rem; display: grid;
+                grid-template-columns: 1fr auto; }
+  .titleblock > div { padding: 1.5rem 1.75rem; }
+  .tb-main { border-right: 1px solid var(--rule); }
+  .eyebrow { font-family: var(--mono); font-size: .7rem; letter-spacing: .16em;
+             text-transform: uppercase; color: var(--accent); margin: 0 0 .6rem; }
+  .titleblock h1 { font-size: clamp(1.6rem, 3.4vw, 2.35rem); line-height: 1.15;
+                   letter-spacing: -.022em; margin: 0 0 .7rem; text-wrap: balance; font-weight: 620; }
+  .tb-sub { color: var(--ink-2); margin: 0; max-width: 58ch; }
+  .tb-meta { font-family: var(--mono); font-size: .74rem; line-height: 1.9;
+             color: var(--ink-2); white-space: nowrap; }
+  .tb-meta b { color: var(--ink); font-weight: 600; display: block;
+               font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+
+  /* Two-column shell */
+  .shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 3.5rem; align-items: start; }
+  .toc { position: sticky; top: 1.5rem; font-family: var(--mono); font-size: .76rem; }
+  .toc h2 { font-size: .66rem; letter-spacing: .14em; text-transform: uppercase;
+            color: var(--ink-3); margin: 0 0 .85rem; font-weight: 600; }
+  .toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .1rem; }
+  .toc a { display: flex; gap: .6rem; padding: .32rem .4rem; color: var(--ink-2);
+           text-decoration: none; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--accent); border-left-color: var(--accent); background: var(--rule-soft); }
+  .toc a .n { color: var(--ink-3); }
+
+  main { min-width: 0; }
+  section { margin: 0 0 3.5rem; scroll-margin-top: 1.5rem; }
+  h2.sec { display: flex; align-items: baseline; gap: .8rem; font-size: 1.32rem;
+           letter-spacing: -.015em; margin: 0 0 .3rem; padding-bottom: .7rem;
+           border-bottom: 1px solid var(--rule); text-wrap: balance; font-weight: 620; }
+  h2.sec .n { font-family: var(--mono); font-size: .82rem; color: var(--accent);
+              letter-spacing: .06em; flex: none; }
+  h3 { font-size: 1rem; margin: 2rem 0 .5rem; letter-spacing: -.01em; font-weight: 620; }
+  p, li { max-width: var(--measure); }
+  p { margin: .85rem 0; }
+  ul, ol.body { padding-left: 1.15rem; margin: .85rem 0; }
+  li { margin: .3rem 0; }
+  strong { font-weight: 640; }
+  code { font-family: var(--mono); font-size: .855em; background: var(--rule-soft);
+         padding: .1em .38em; border-radius: 3px; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Callouts */
+  .note { border-left: 3px solid var(--accent); background: var(--accent-bg);
+          padding: .9rem 1.1rem; margin: 1.4rem 0; border-radius: 0; max-width: var(--measure); }
+  .note.warn { border-left-color: var(--crit); background: var(--crit-bg); }
+  .note p { margin: .35rem 0; }
+  .note .lbl { font-family: var(--mono); font-size: .68rem; letter-spacing: .13em;
+               text-transform: uppercase; color: var(--accent); display: block; margin-bottom: .35rem; }
+  .note.warn .lbl { color: var(--crit); }
+
+  /* Tenets */
+  .tenets { list-style: none; padding: 0; counter-reset: t; display: grid; gap: .1rem; }
+  .tenets li { max-width: none; display: grid; grid-template-columns: 2.4rem 1fr; gap: .9rem;
+               padding: .8rem 0; border-bottom: 1px solid var(--rule-soft); margin: 0; }
+  .tenets li::before { counter-increment: t; content: counter(t, decimal-leading-zero);
+                       font-family: var(--mono); font-size: .78rem; color: var(--accent); }
+
+  /* Drawing sheets — always light so diagram strokes stay legible in both themes */
+  figure.sheet { margin: 1.75rem 0; background: var(--sheet); border: 1px solid var(--rule);
+                 color-scheme: light; }
+  figure.sheet .body { overflow-x: auto; padding: 1.5rem; }
+  figure.sheet pre.mermaid { margin: 0; background: none; padding: 0; min-width: 520px; }
+  figure.sheet figcaption { font-family: var(--mono); font-size: .7rem; letter-spacing: .1em;
+                            text-transform: uppercase; color: #5A6B7C; padding: .65rem 1rem;
+                            border-top: 1px solid #D6DEE6; display: flex; justify-content: space-between; gap: 1rem; }
+  figure.sheet figcaption .id { color: #92693A; }
+
+  /* Tables */
+  .tw { overflow-x: auto; margin: 1.4rem 0; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; min-width: 460px; }
+  th, td { text-align: left; padding: .6rem .85rem; border-bottom: 1px solid var(--rule-soft);
+           vertical-align: top; }
+  th { font-family: var(--mono); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+       color: var(--ink-3); font-weight: 600; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num, td.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .yes { color: var(--good); font-weight: 640; }
+  .no  { color: var(--crit); font-weight: 640; }
+
+  /* Code blocks */
+  pre.code { font-family: var(--mono); font-size: .8rem; line-height: 1.6; background: var(--surface);
+             border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+             padding: 1rem 1.15rem; overflow-x: auto; margin: 1.4rem 0; color: var(--ink); }
+  pre.code .c { color: var(--ink-3); }
+
+  /* Checklist */
+  .check { list-style: none; padding: 0; display: grid; gap: 0; }
+  .check li { max-width: none; margin: 0; padding: .55rem 0 .55rem 1.9rem; position: relative;
+              border-bottom: 1px solid var(--rule-soft); }
+  .check li::before { content: "\2610"; position: absolute; left: 0; top: .5rem;
+                      font-family: var(--mono); color: var(--accent); font-size: 1rem; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; gap: 2rem; }
+    .toc { position: static; border-bottom: 1px solid var(--rule); padding-bottom: 1rem; }
+    .toc ol { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .titleblock { grid-template-columns: 1fr; }
+    .tb-main { border-right: none; border-bottom: 1px solid var(--rule); }
+  }
+  @media (prefers-reduced-motion: reduce) { .doc * { transition: none !important; } }
+</style>
+
+<div class="doc">
+<div class="wrap">
+
+  <header class="titleblock">
+    <div class="tb-main">
+      <p class="eyebrow">Architecture Blueprint</p>
+      <h1>Journey Booking &amp; Seat Reservation</h1>
+      <p class="tb-sub">End-to-end lifecycle for a high-concurrency reservation platform: search, seat holds
+        under contention, checkout, and the machinery that reclaims what nobody paid for.</p>
+    </div>
+    <div class="tb-meta">
+      <b>Scope</b>Search → Hold → Checkout
+      <b>Audience</b>Principal / Senior Eng
+      <b>Diagrams</b>6 · Mermaid
+      <b>Status</b>For review
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="toc" aria-label="Section index">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s0"><span class="n">00</span> Design tenets</a></li>
+        <li><a href="#s1"><span class="n">01</span> System architecture</a></li>
+        <li><a href="#s2"><span class="n">02</span> Domain model</a></li>
+        <li><a href="#s3"><span class="n">03</span> Seat lifecycle</a></li>
+        <li><a href="#s4"><span class="n">04</span> Flow A · Hold</a></li>
+        <li><a href="#s5"><span class="n">05</span> The guard</a></li>
+        <li><a href="#s6"><span class="n">06</span> Flow B · Payment</a></li>
+        <li><a href="#s7"><span class="n">07</span> Flow C · Cleanup</a></li>
+        <li><a href="#s8"><span class="n">08</span> Cache &amp; concurrency</a></li>
+        <li><a href="#s9"><span class="n">09</span> Capacity</a></li>
+        <li><a href="#s10"><span class="n">10</span> Checklist</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+    <section id="s0">
+      <h2 class="sec"><span class="n">00</span> Design tenets</h2>
+      <p>Five rules the rest of the document derives from.</p>
+      <ol class="tenets">
+        <li><span><strong>The database is the arbiter of inventory. The cache is an accelerator.</strong>
+          Redis may say a seat is free and be wrong; the database must never be wrong. Every hold is
+          validated by a uniqueness constraint inside the transaction that writes it.</span></li>
+        <li><span><strong>Holds are leases, not locks.</strong> A hold carries a wall-clock expiry in its row.
+          Correctness must not depend on a background job running on time — expiry is evaluated
+          <em>on read</em>, and the sweeper is only a garbage collector.</span></li>
+        <li><span><strong>Never hold a database transaction across a network call.</strong> Payment splits into
+          short transactions with the gateway call in the gap.</span></li>
+        <li><span><strong>Every in-doubt state must be resolvable by a reconciler.</strong> If a process dies
+          between “charged” and “confirmed”, a job must finish or reverse it.</span></li>
+        <li><span><strong>Money and inventory reconcile independently.</strong> A charge that cannot be honoured
+          is refunded, never silently dropped.</span></li>
+      </ol>
+    </section>
+
+    <section id="s1">
+      <h2 class="sec"><span class="n">01</span> System architecture</h2>
+      <p>Read traffic and write traffic take deliberately different routes: search is served from cache and
+        replicas and may be seconds stale, while every hold and confirmation goes to the primary.</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart TB
+    subgraph clients["Clients"]
+        WEB["Web / Mobile App"]
+    end
+    subgraph edge["Edge"]
+        GW["API Gateway&lt;br/&gt;auth · rate limit · idempotency key"]
+    end
+    subgraph svc["Application Services"]
+        SEARCH["Search Service&lt;br/&gt;read-only, cache-first"]
+        INV["Inventory Service&lt;br/&gt;seat map + availability"]
+        RES["Reservation Service&lt;br/&gt;holds · swaps · releases"]
+        PAY["Payment Orchestrator&lt;br/&gt;2-phase, no txn over network"]
+        TKT["Ticketing Service"]
+    end
+    subgraph cache["Cache Layer — Redis"]
+        RMAP[("Seat maps + availability&lt;br/&gt;short TTL · cache-aside")]
+        RLOCK[("Hold fast-path keys&lt;br/&gt;SET NX PX + Lua")]
+        RIDEM[("Idempotency registry")]
+    end
+    subgraph data["Durable State"]
+        PG[("Primary DB&lt;br/&gt;authoritative inventory")]
+        REPLICA[("Read Replicas")]
+    end
+    subgraph async["Async Plane"]
+        MQ{{"Message Broker"}}
+        SWEEP["Hold Sweeper&lt;br/&gt;batched · leader-elected"]
+        RECON["Payment Reconciler"]
+        PROJ["Projection Workers"]
+    end
+    EXT["Payment Gateway"]
+
+    WEB --> GW
+    GW --> SEARCH & INV & RES & PAY
+    SEARCH -->|cache-aside| RMAP
+    SEARCH -->|miss| REPLICA
+    INV -->|cache-aside| RMAP
+    INV -->|miss| PG
+    RES -->|"1 · fast-path lock"| RLOCK
+    RES -->|"2 · authoritative write"| PG
+    RES -->|evict after commit| RMAP
+    PAY --> RIDEM
+    PAY -->|charge outside txn| EXT
+    PAY --> PG
+    PAY --> MQ
+    MQ --> TKT
+    MQ --> PROJ
+    PROJ --> RMAP
+    SWEEP --> PG
+    SWEEP -.evict.-> RMAP
+    RECON --> PG
+    RECON --> EXT
+    PG -.replication.-> REPLICA
+</pre>
+        </div>
+        <figcaption><span>System context and data planes</span><span class="id">FIG-01</span></figcaption>
+      </figure>
+
+      <ul>
+        <li><strong>API Gateway</strong> — authn/z, rate limiting per user <em>and</em> per trip, and client-supplied
+          idempotency keys on every mutating call. Seat-hold endpoints are the hottest abuse target.</li>
+        <li><strong>Search</strong> — pure read path, served from cache falling back to <strong>read replicas</strong>.
+          Never touches the primary.</li>
+        <li><strong>Reservation</strong> — the only writer of hold state. Redis advisory lock first, authoritative
+          DB write second.</li>
+        <li><strong>Payment Orchestrator</strong> — a separate service so its transaction boundaries are real; inlining
+          it collapses two transactions into one via self-invocation.</li>
+        <li><strong>Sweeper / Reconciler</strong> — idempotent safety nets, both leader-elected so N replicas
+          don’t stampede.</li>
+      </ul>
+    </section>
+
+    <section id="s2">
+      <h2 class="sec"><span class="n">02</span> Domain model</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+erDiagram
+    USER ||--o{ RESERVATION : places
+    USER ||--o{ PAYMENT : pays
+    ROUTE ||--o{ JOURNEY : "scheduled as"
+    JOURNEY ||--o{ TRIP : "runs on date"
+    TRAINSET ||--o{ COACH : "composed of"
+    TRIP }o--|| TRAINSET : "operated by"
+    COACH ||--o{ SEAT : contains
+    TRIP ||--o{ SEAT_INVENTORY : materialises
+    SEAT ||--o{ SEAT_INVENTORY : "instance per trip"
+    RESERVATION ||--o{ RESERVATION_SEAT : holds
+    SEAT_INVENTORY ||--o{ RESERVATION_SEAT : "locked by"
+    RESERVATION ||--o| PAYMENT : "settled by"
+    RESERVATION ||--o{ TICKET : issues
+
+    USER { bigint id PK
+           string external_ref UK }
+    ROUTE { bigint id PK
+            string origin_code
+            string destination_code }
+    JOURNEY { bigint id PK
+              bigint route_id FK
+              time departure_time }
+    TRIP { bigint id PK
+           bigint journey_id FK
+           date service_date
+           string status }
+    COACH { bigint id PK
+            string code
+            string class }
+    SEAT { bigint id PK
+           bigint coach_id FK
+           string label
+           string attributes }
+    SEAT_INVENTORY { bigint id PK
+                     bigint trip_id FK
+                     bigint seat_id FK
+                     decimal price }
+    RESERVATION { bigint id PK
+                  bigint user_id FK
+                  string status
+                  decimal total_amount
+                  timestamp expires_at
+                  bigint version }
+    RESERVATION_SEAT { bigint id PK
+                       bigint reservation_id FK
+                       string status
+                       string active_lock UK }
+    PAYMENT { bigint id PK
+              bigint reservation_id FK
+              string idempotency_key UK
+              string status }
+    TICKET { bigint id PK
+             string ticket_number UK
+             string seat_label_snapshot }
+</pre>
+        </div>
+        <figcaption><span>Entity relationships</span><span class="id">FIG-02</span></figcaption>
+      </figure>
+
+      <h3>Modelling calls worth defending</h3>
+      <ul>
+        <li><strong><code>SEAT</code> vs <code>SEAT_INVENTORY</code>.</strong> <code>SEAT</code> is physical
+          (coach 3, seat 12A) and static. <code>SEAT_INVENTORY</code> is <em>that seat on that trip</em>, and is
+          what gets sold. Without the split you cannot price the same physical seat differently across dates.</li>
+        <li><strong><code>TICKET</code> snapshots</strong> the seat label at issue time. Layouts get remapped;
+          an issued ticket must never change retroactively.</li>
+        <li><strong><code>RESERVATION_SEAT.active_lock</code></strong> is the keystone — see §05.</li>
+      </ul>
+    </section>
+
+    <section id="s3">
+      <h2 class="sec"><span class="n">03</span> Seat lifecycle</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --&gt; AVAILABLE : trip inventory materialised
+    AVAILABLE --&gt; HELD : hold acquired, TTL starts
+    HELD --&gt; AVAILABLE : TTL expired / cancelled / swapped out
+    HELD --&gt; BOOKED : payment succeeded
+    BOOKED --&gt; RELEASED : refund or operator cancellation
+    RELEASED --&gt; AVAILABLE : returned to pool
+    AVAILABLE --&gt; BLOCKED : ops hold, maintenance, crew
+    BLOCKED --&gt; AVAILABLE : block lifted
+    BOOKED --&gt; [*] : trip departed
+
+    note right of HELD
+        Occupies inventory.
+        expires_at is authoritative:
+        evaluated on read, not when
+        a job happens to run.
+    end note
+    note right of BOOKED
+        Permanent occupancy.
+        Only a refund releases it.
+    end note
+</pre>
+        </div>
+        <figcaption><span>Seat state machine</span><span class="id">FIG-03</span></figcaption>
+      </figure>
+
+      <ul>
+        <li><code>HELD</code> and <code>BOOKED</code> are the only states that occupy inventory — the uniqueness
+          constraint keys off exactly this pair.</li>
+        <li><strong>Expiry is lazy-evaluated.</strong> A <code>HELD</code> row past <code>expires_at</code> is treated
+          as free on the next read of that trip and released in the same transaction as the new hold.</li>
+        <li><strong><code>RELEASED</code> is terminal for that row</strong>, not a return to <code>HELD</code>.
+          Re-holding writes a new row, preserving an append-only audit trail.</li>
+        <li><strong><code>BLOCKED</code></strong> lets operations withhold seats without inventing a fake reservation.</li>
+      </ul>
+    </section>
+
+    <section id="s4">
+      <h2 class="sec"><span class="n">04</span> Flow A · Seat hold &amp; lock acquisition</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor U1 as User A
+    actor U2 as User B
+    participant GW as Gateway
+    participant RES as Reservation Svc
+    participant R as Redis
+    participant DB as Primary DB
+
+    U1-&gt;&gt;GW: POST /holds {trip, seats 12A,12B}
+    U2-&gt;&gt;GW: POST /holds {trip, seats 12B,12C}
+    GW-&gt;&gt;RES: forward, idempotency keys attached
+
+    Note over RES,R: Stage 1 — fast path, all-or-nothing via Lua
+    RES-&gt;&gt;R: EVAL acquire.lua KEYS 12A,12B
+    R--&gt;&gt;RES: 1 acquired
+    RES-&gt;&gt;R: EVAL acquire.lua KEYS 12B,12C
+    R--&gt;&gt;RES: 0 — 12B taken
+    RES--&gt;&gt;U2: 409 Conflict, seat 12B unavailable
+
+    Note over RES,DB: Stage 2 — authoritative write, User A only
+    RES-&gt;&gt;DB: BEGIN
+    RES-&gt;&gt;DB: release rows HELD and expires_at &lt; now
+    RES-&gt;&gt;DB: FLUSH (ordering matters)
+    RES-&gt;&gt;DB: INSERT holds, seat ids sorted
+    alt unique index accepts
+        DB--&gt;&gt;RES: OK
+        RES-&gt;&gt;DB: COMMIT
+        RES-&gt;&gt;R: evict seatmap AFTER COMMIT
+        RES--&gt;&gt;U1: 201 Created {holdId, expiresAt}
+    else duplicate active_lock
+        DB--&gt;&gt;RES: 23000 duplicate key
+        RES-&gt;&gt;DB: ROLLBACK
+        RES-&gt;&gt;R: DEL fast-path keys
+        RES--&gt;&gt;U1: 409 Conflict, seat just taken
+    end
+</pre>
+        </div>
+        <figcaption><span>Contended hold, two users, one seat</span><span class="id">FIG-04</span></figcaption>
+      </figure>
+
+      <h3>Two layers, one authority</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Layer</th><th>Mechanism</th><th>Purpose</th><th>Authoritative</th></tr></thead>
+          <tbody>
+            <tr><td>Redis</td><td class="mono">SET NX PX in Lua</td><td>Reject ~99% of collisions in &lt;1 ms</td><td class="no">No</td></tr>
+            <tr><td>Database</td><td class="mono">UNIQUE on generated column</td><td>Guarantee no double-booking, ever</td><td class="yes">Yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Seat selection is all-or-nothing — a party of three won’t accept two seats. <code>SET NX</code> is not
+        atomic across keys, so acquisition must be scripted. Redis runs scripts single-threaded, closing the
+        check-and-set window.</p>
+
+<pre class="code"><span class="c">-- KEYS[1..N] = seat:{tripId}:{seatId}   ARGV[1] = token   ARGV[2] = ttl ms</span>
+for i = 1, #KEYS do
+  if redis.call('EXISTS', KEYS[i]) == 1 then
+    return 0                      <span class="c">-- someone holds one: take nothing</span>
+  end
+end
+for i = 1, #KEYS do
+  redis.call('SET', KEYS[i], ARGV[1], 'PX', tonumber(ARGV[2]))
+end
+return 1</pre>
+
+      <div class="note">
+        <span class="lbl">Two non-obvious correctness details</span>
+        <p><strong>Flush ordering.</strong> Releasing expired holds is an <code>UPDATE</code>; taking the new hold is an
+          <code>INSERT</code>. ORMs commonly order INSERTs <em>before</em> UPDATEs within a flush — so the insert
+          collides with the row you were about to free. Force a flush between them.</p>
+        <p><strong>Deterministic seat ordering.</strong> Sort seat IDs before inserting. Two requests acquiring
+          <code>{A,B}</code> and <code>{B,A}</code> take index locks in opposite order and deadlock. A global order
+          turns a deadlock into a clean wait-then-conflict.</p>
+      </div>
+    </section>
+
+    <section id="s5">
+      <h2 class="sec"><span class="n">05</span> The uniqueness guard</h2>
+      <p>Partial indexes (<code>WHERE status IN (…)</code>) don’t exist in MySQL. A generated column plus NULL
+        semantics reproduces them:</p>
+
+<pre class="code">active_lock VARCHAR(48) GENERATED ALWAYS AS (
+    CASE WHEN status IN ('HELD','BOOKED')
+         THEN CONCAT(trip_id, '-', seat_inventory_id)
+         ELSE NULL END
+) STORED,
+CONSTRAINT uq_reservation_seat_active UNIQUE (active_lock)</pre>
+
+      <ul>
+        <li>Occupied rows produce a non-null key → any second occupant violates the constraint.</li>
+        <li>Released rows produce <code>NULL</code>, and SQL permits <strong>unlimited NULLs</strong> in a unique
+          index → seats recycle freely.</li>
+        <li>Correctness holds even if the application is bypassed — admin scripts, migrations, a second service.</li>
+      </ul>
+
+      <div class="note warn">
+        <span class="lbl">Operational warning — learned the hard way</span>
+        <p>An ORM with schema auto-generation (<code>ddl-auto: update</code> / <code>create</code>) will recreate this
+          table from the entity classes — and it <em>cannot see a generated column</em>, because it isn’t a mapped
+          field. The column and its unique index vanish silently. Every code path still looks correct; the conflict
+          handler simply becomes dead code, and double-booking becomes possible.</p>
+        <p>Pin schema management to migrations only (<code>validate</code>), and add a test that asserts the
+          constraint exists in the deployed database.</p>
+      </div>
+    </section>
+
+    <section id="s6">
+      <h2 class="sec"><span class="n">06</span> Flow B · Payment &amp; persistence</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant PAY as Payment Orchestrator
+    participant RES as Reservation Svc
+    participant DB as Primary DB
+    participant EXT as Gateway
+    participant MQ as Broker
+    participant R as Redis
+
+    U-&gt;&gt;PAY: POST /reservations/{id}/pay
+
+    Note over PAY,DB: TXN 1 — claim intent (short)
+    PAY-&gt;&gt;RES: beginPayment
+    RES-&gt;&gt;DB: SELECT hold FOR UPDATE, assert PENDING and not expired
+    RES-&gt;&gt;DB: INSERT payment INITIATED with idempotency key
+    RES--&gt;&gt;PAY: PaymentContext snapshot
+
+    Note over PAY,EXT: NO TRANSACTION OPEN — network call
+    PAY-&gt;&gt;EXT: charge(amount, idempotencyKey)
+    alt gateway responds
+        EXT--&gt;&gt;PAY: success + reference
+    else timeout or exception
+        EXT--xPAY: outcome unknown
+        PAY--&gt;&gt;U: 202 payment processing
+    end
+
+    Note over PAY,MQ: TXN 2 — apply outcome (short)
+    PAY-&gt;&gt;RES: applyPaymentResult
+    RES-&gt;&gt;DB: re-validate hold still valid
+    alt hold still valid
+        RES-&gt;&gt;DB: payment SUCCEEDED, reservation CONFIRMED, seats HELD to BOOKED
+        RES-&gt;&gt;DB: INSERT tickets (idempotent)
+        RES-&gt;&gt;DB: COMMIT
+        RES-&gt;&gt;R: evict seatmap AFTER COMMIT
+        RES-&gt;&gt;MQ: publish ReservationConfirmed
+        RES--&gt;&gt;U: 200 Confirmed
+    else hold expired during charge
+        RES--xDB: ROLLBACK, payment stays INITIATED
+        RES--&gt;&gt;U: 409 charge will be refunded
+        Note over MQ: reconciler issues refund
+    end
+</pre>
+        </div>
+        <figcaption><span>Two transactions, gateway call in the gap</span><span class="id">FIG-05</span></figcaption>
+      </figure>
+
+      <ul>
+        <li>A gateway call takes seconds. Holding a transaction across it pins connections until the pool starves.</li>
+        <li>The <code>INITIATED</code> row is the <strong>durable record of intent</strong>. If the process dies after it,
+          the reconciler queries the gateway by idempotency key and finishes the job.</li>
+        <li>The rollback on “hold expired” is <strong>deliberate</strong> — it preserves <code>INITIATED</code> so the
+          reconciler refunds. Making this path “not throw” would strand real charges.</li>
+        <li>Ticket generation must be <strong>idempotent</strong>; reconciliation can confirm the same reservation twice.</li>
+        <li><strong>Evict, don’t write-through</strong>, and register it <strong>after commit</strong> — otherwise a concurrent
+          reader repopulates the cache from pre-commit state.</li>
+      </ul>
+    </section>
+
+    <section id="s7">
+      <h2 class="sec"><span class="n">07</span> Flow C · Expiration &amp; cleanup</h2>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant R as Redis
+    participant U as Next User
+    participant RES as Reservation Svc
+    participant DB as Primary DB
+    participant SW as Hold Sweeper
+    participant LK as Lease Lock
+
+    Note over R: Path 1 — Redis TTL (passive)
+    R--&gt;&gt;R: seat key expires automatically
+    Note over R: fast path only, carries no truth
+
+    Note over U,DB: Path 2 — lazy release (primary, hot trips)
+    U-&gt;&gt;RES: POST /holds on the same trip
+    RES-&gt;&gt;DB: UPDATE status RELEASED where HELD and expires_at &lt; now
+    RES-&gt;&gt;DB: FLUSH
+    RES-&gt;&gt;DB: INSERT new hold
+    Note over RES,DB: freed and re-sold in one transaction
+
+    Note over SW,DB: Path 3 — sweeper (safety net, cold trips)
+    loop every N seconds
+        SW-&gt;&gt;LK: acquire lease
+        alt lease acquired
+            loop until short batch
+                SW-&gt;&gt;DB: SELECT expired LIMIT 200 FOR UPDATE SKIP LOCKED
+                SW-&gt;&gt;DB: expire batch, release seats
+                SW-&gt;&gt;R: evict affected seatmaps
+            end
+        else lease held elsewhere
+            SW--&gt;&gt;SW: skip this tick
+        end
+    end
+</pre>
+        </div>
+        <figcaption><span>Three release paths, deliberately redundant</span><span class="id">FIG-06</span></figcaption>
+      </figure>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Path</th><th>Trigger</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td>Redis TTL</td><td>key expiry</td><td>Frees the <em>advisory</em> lock only</td></tr>
+            <tr><td>Lazy release</td><td>next hold on that trip</td><td><strong>Primary</strong> — hot inventory recycles instantly</td></tr>
+            <tr><td>Sweeper</td><td>scheduled</td><td>Safety net for trips nobody is browsing</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>Sweeper requirements:</strong> bounded batches (~200) so a flash-sale expiry wave can’t pull tens of
+        thousands of rows into one transaction; <code>FOR UPDATE SKIP LOCKED</code> so workers make progress instead of
+        queueing; a lease or leader election so replicas don’t duplicate work; and a cap on iterations per tick.</p>
+
+      <div class="note">
+        <span class="lbl">Invariant</span>
+        <p>The sweeper going down must degrade <em>performance</em>, never <em>correctness</em>. Lazy release is what
+          guarantees that.</p>
+      </div>
+    </section>
+
+    <section id="s8">
+      <h2 class="sec"><span class="n">08</span> Caching &amp; concurrency blueprint</h2>
+
+      <h3>Key space</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Key</th><th>Type</th><th>TTL</th><th>Pattern</th><th>Contents</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">trip:{tripId}:seatmap</td><td>String / Hash</td><td class="num">2–5 s</td><td>Cache-aside</td><td>Seat map with per-seat status</td></tr>
+            <tr><td class="mono">trip:{tripId}:availability</td><td>Hash</td><td class="num">2–5 s</td><td>Cache-aside</td><td>class → free count</td></tr>
+            <tr><td class="mono">search:{o}:{d}:{date}</td><td>Sorted Set</td><td class="num">30–60 s</td><td>Cache-aside</td><td>Trip IDs scored by departure</td></tr>
+            <tr><td class="mono">journey:{id}:meta</td><td>Hash</td><td class="num">1 h</td><td>Write-through</td><td>Static route / schedule</td></tr>
+            <tr><td class="mono">seat:{tripId}:{seatId}</td><td>String</td><td class="num">= hold</td><td>Write-only lock</td><td>Hold token (advisory)</td></tr>
+            <tr><td class="mono">hold:{holdId}</td><td>Hash</td><td class="num">= hold</td><td>Write-through</td><td>Hold metadata</td></tr>
+            <tr><td class="mono">user:{userId}:holds</td><td>Set</td><td class="num">= hold</td><td>Write-through</td><td>Enforces max concurrent holds</td></tr>
+            <tr><td class="mono">idem:{key}</td><td>String</td><td class="num">24 h</td><td>Write-through</td><td>Response snapshot for retries</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <span class="lbl">Why the seat-map TTL is seconds, not minutes</span>
+        <p>A stale seat map can never cause a double-booking — the constraint stops that. It only causes a user to
+          click a seat that’s gone and get a 409. Seconds keeps that rare without hammering the primary.</p>
+      </div>
+
+      <h3>Concurrency strategy by contention shape</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Shape</th><th>Strategy</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Two users, same seat</td><td>DB unique constraint</td><td>Authoritative</td></tr>
+            <tr><td>Same-seat storm</td><td>Redis Lua fast rejection</td><td>Shields the DB</td></tr>
+            <tr><td>Quota / unreserved counters</td><td>Pessimistic row lock, narrowest scope</td><td>See below</td></tr>
+            <tr><td>Concurrent edits to one reservation</td><td>Optimistic version column</td><td>Lost-update protection</td></tr>
+            <tr><td>Duplicate submits</td><td>Idempotency key + unique index</td><td>End-to-end</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>Lock at the narrowest correct scope.</strong> If capacity is per coach class, lock the class quota row,
+        not the trip. Locking the trip serialises every sale on it — including classes that never contend. This is the
+        single most common throughput mistake in this design.</p>
+
+      <h3>Failure modes</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Failure</th><th>Behaviour</th><th>Mitigation</th></tr></thead>
+          <tbody>
+            <tr><td>Cache miss</td><td>Falls through to DB, repopulates</td><td>Index the loader; paginate by coach</td></tr>
+            <tr><td>Redis down</td><td>Fast path gone, DB still correct</td><td>Circuit-break and shed load; don’t melt the primary</td></tr>
+            <tr><td>Thundering herd on expiry</td><td>Keys expire together</td><td>Jitter TTL ±20%; single-flight on miss</td></tr>
+            <tr><td>Network partition to Redis</td><td>Advisory lock lost only</td><td>Short timeouts (~500 ms) with fallback</td></tr>
+            <tr><td>Abandoned checkout</td><td>Hold expires</td><td>Lazy release + sweeper</td></tr>
+            <tr><td>Crash mid-payment</td><td>Payment stuck INITIATED</td><td>Reconciler confirms or refunds</td></tr>
+            <tr><td>Gateway timeout</td><td>Outcome unknown</td><td>Idempotency key prevents double charge</td></tr>
+            <tr><td>Duplicate pay requests</td><td>One wins on unique reservation_id</td><td>Return <strong>409</strong>, not 500</td></tr>
+            <tr><td>Clock skew across replicas</td><td>Premature or late expiry</td><td>Evaluate expiry with <strong>DB time</strong></td></tr>
+            <tr><td>Replica lag on search</td><td>Slightly stale trip list</td><td>Acceptable; holds always read the primary</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s9">
+      <h2 class="sec"><span class="n">09</span> Capacity &amp; complexity</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Operation</th><th>Complexity</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Hold N seats</td><td class="mono">O(N + E)</td><td>E = expired holds released inline; ~4 queries</td></tr>
+            <tr><td>Quota booking</td><td class="mono">O(1) + 2 agg</td><td>Serialised by the narrow row lock</td></tr>
+            <tr><td>Seat map (miss)</td><td class="mono">O(S + A)</td><td>S = seats on trip, A = active holds</td></tr>
+            <tr><td>Seat map (hit)</td><td class="mono">O(1)</td><td>Single Redis GET</td></tr>
+            <tr><td>Sweeper tick</td><td class="mono">O(B)</td><td>Bounded by construction</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+<pre class="code">CREATE UNIQUE INDEX uq_reservation_seat_active ON reservation_seat (active_lock);
+CREATE INDEX idx_rs_trip_status          ON reservation_seat (trip_id, status);
+CREATE INDEX idx_res_trip_status_expiry  ON reservation (trip_id, status, expires_at);
+CREATE INDEX idx_res_quota_status_expiry ON reservation (quota_id, status, expires_at);
+CREATE INDEX idx_res_user_created        ON reservation (user_id, created_at DESC, id DESC);
+CREATE INDEX idx_payment_status_updated  ON payment (status, updated_at);</pre>
+    </section>
+
+    <section id="s10">
+      <h2 class="sec"><span class="n">10</span> Pre-ship checklist</h2>
+      <ul class="check">
+        <li><code>uq_*_active</code> unique index <strong>exists in the deployed database</strong> — asserted by an automated test, not by inspection</li>
+        <li>Schema tooling is migrations-only; auto-DDL disabled in every environment</li>
+        <li>Seat IDs sorted before insert (deadlock avoidance)</li>
+        <li>Flush forced between expiry-release and new-hold insert</li>
+        <li>Payment split across two transactions, gateway call in the gap</li>
+        <li>Ticket generation idempotent</li>
+        <li>Cache eviction registered after commit</li>
+        <li>Sweeper batched, <code>SKIP LOCKED</code>, leader-elected</li>
+        <li>Cache TTLs jittered</li>
+        <li>Duplicate-pay returns 409, not 500</li>
+        <li>A refund path returns <code>BOOKED</code> seats to the pool and clears any sold-out flag</li>
+      </ul>
+    </section>
+
+    </main>
+  </div>
+</div>
+</div>

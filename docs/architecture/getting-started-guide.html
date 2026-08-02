@@ -1,0 +1,596 @@
+<title>Event Ticketing — A Guide for New Engineers</title>
+
+<style>
+  :root {
+    color-scheme: light;
+    --paper:#F2F4F7; --surface:#FFFFFF; --sheet:#F8FAFB;
+    --ink:#182430; --ink-2:#4C5D6E; --ink-3:#718294;
+    --rule:#CBD5DF; --rule-soft:#E1E8EE;
+    --accent:#A85D00; --accent-bg:#FBF0E1;
+    --idea:#1B6E4B; --idea-bg:#E6F2EC;
+    --warn:#A32B22; --warn-bg:#F9E7E5;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,"Helvetica Neue",sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","Segoe UI Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme:dark;
+      --paper:#0E141B; --surface:#161F29; --sheet:#EEF2F5;
+      --ink:#E5EBF1; --ink-2:#9DACBB; --ink-3:#7C8C9D;
+      --rule:#27343F; --rule-soft:#1E2933;
+      --accent:#E8A44B; --accent-bg:#2A2115;
+      --idea:#57B481; --idea-bg:#16271F;
+      --warn:#E8776B; --warn-bg:#2B1B19; }
+  }
+  :root[data-theme="dark"] { color-scheme:dark;
+    --paper:#0E141B; --surface:#161F29; --sheet:#EEF2F5;
+    --ink:#E5EBF1; --ink-2:#9DACBB; --ink-3:#7C8C9D;
+    --rule:#27343F; --rule-soft:#1E2933;
+    --accent:#E8A44B; --accent-bg:#2A2115;
+    --idea:#57B481; --idea-bg:#16271F; --warn:#E8776B; --warn-bg:#2B1B19; }
+  :root[data-theme="light"] { color-scheme:light;
+    --paper:#F2F4F7; --surface:#FFFFFF; --sheet:#F8FAFB;
+    --ink:#182430; --ink-2:#4C5D6E; --ink-3:#718294;
+    --rule:#CBD5DF; --rule-soft:#E1E8EE;
+    --accent:#A85D00; --accent-bg:#FBF0E1;
+    --idea:#1B6E4B; --idea-bg:#E6F2EC; --warn:#A32B22; --warn-bg:#F9E7E5; }
+
+  .doc { background:var(--paper); color:var(--ink); font-family:var(--sans);
+         font-size:17px; line-height:1.75; padding:0 0 6rem; }
+  .doc *,.doc *::before,.doc *::after { box-sizing:border-box; }
+  .wrap { max-width:1120px; margin:0 auto; padding:0 1.5rem; }
+
+  header.hero { margin:3rem 0 3.5rem; padding-bottom:2rem; border-bottom:2px solid var(--rule); }
+  .kicker { font-family:var(--mono); font-size:.72rem; letter-spacing:.18em; text-transform:uppercase;
+            color:var(--accent); margin:0 0 .9rem; }
+  header.hero h1 { font-size:clamp(1.9rem,4.6vw,3rem); line-height:1.1; letter-spacing:-.025em;
+                   margin:0 0 1rem; font-weight:640; text-wrap:balance; }
+  .standfirst { font-size:1.12rem; color:var(--ink-2); max-width:62ch; margin:0; }
+
+  .shell { display:grid; grid-template-columns:220px minmax(0,1fr); gap:3.5rem; align-items:start; }
+  .toc { position:sticky; top:1.5rem; font-size:.85rem; }
+  .toc h2 { font-family:var(--mono); font-size:.68rem; letter-spacing:.14em; text-transform:uppercase;
+            color:var(--ink-3); margin:0 0 .9rem; font-weight:600; }
+  .toc ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.15rem; }
+  .toc a { display:flex; gap:.65rem; padding:.35rem .45rem; color:var(--ink-2); text-decoration:none;
+           border-left:2px solid transparent; border-radius:0 4px 4px 0; }
+  .toc a:hover { color:var(--accent); border-left-color:var(--accent); background:var(--rule-soft); }
+  .toc a .n { font-family:var(--mono); color:var(--ink-3); font-size:.78rem; }
+
+  main { min-width:0; }
+  section { margin:0 0 4rem; scroll-margin-top:1.5rem; }
+  h2.sec { font-size:1.6rem; letter-spacing:-.02em; margin:0 0 1rem; font-weight:640; text-wrap:balance;
+           display:flex; align-items:baseline; gap:.85rem; }
+  h2.sec .n { font-family:var(--mono); font-size:.9rem; color:var(--accent); flex:none; }
+  h3 { font-size:1.12rem; margin:2.2rem 0 .6rem; font-weight:640; letter-spacing:-.01em; }
+  p,li { max-width:68ch; }
+  p { margin:1rem 0; }
+  ul,ol.body { padding-left:1.3rem; margin:1rem 0; }
+  li { margin:.45rem 0; }
+  code { font-family:var(--mono); font-size:.86em; background:var(--rule-soft);
+         padding:.12em .4em; border-radius:4px; }
+  a { color:var(--accent); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  .card { background:var(--surface); border:1px solid var(--rule); border-radius:10px;
+          padding:1.2rem 1.4rem; margin:1.5rem 0; max-width:68ch; }
+  .card .lbl { font-family:var(--mono); font-size:.68rem; letter-spacing:.13em; text-transform:uppercase;
+               display:block; margin-bottom:.5rem; }
+  .card p:first-of-type { margin-top:0; }
+  .card p:last-child { margin-bottom:0; }
+  .analogy { background:var(--accent-bg); border-color:transparent; border-left:3px solid var(--accent); border-radius:0 10px 10px 0; }
+  .analogy .lbl { color:var(--accent); }
+  .idea { background:var(--idea-bg); border-color:transparent; border-left:3px solid var(--idea); border-radius:0 10px 10px 0; }
+  .idea .lbl { color:var(--idea); }
+  .watch { background:var(--warn-bg); border-color:transparent; border-left:3px solid var(--warn); border-radius:0 10px 10px 0; }
+  .watch .lbl { color:var(--warn); }
+
+  figure.sheet { margin:1.8rem 0; background:var(--sheet); border:1px solid var(--rule);
+                 border-radius:10px; color-scheme:light; overflow:hidden; }
+  figure.sheet .body { overflow-x:auto; padding:1.6rem; }
+  figure.sheet pre.mermaid { margin:0; background:none; padding:0; min-width:480px; }
+  figure.sheet figcaption { font-size:.82rem; color:#546072; padding:.7rem 1.2rem;
+                            border-top:1px solid #DCE3EA; background:#F1F5F8; }
+
+  .tw { overflow-x:auto; margin:1.5rem 0; border:1px solid var(--rule); border-radius:10px;
+        background:var(--surface); }
+  table { border-collapse:collapse; width:100%; font-size:.92rem; min-width:460px; }
+  th,td { text-align:left; padding:.7rem .95rem; border-bottom:1px solid var(--rule-soft); vertical-align:top; }
+  th { font-family:var(--mono); font-size:.68rem; letter-spacing:.1em; text-transform:uppercase;
+       color:var(--ink-3); font-weight:600; border-bottom:1px solid var(--rule); }
+  tbody tr:last-child td { border-bottom:none; }
+  td.term { font-weight:640; white-space:nowrap; }
+  td.mono { font-family:var(--mono); font-size:.86em; }
+
+  ol.steps { list-style:none; counter-reset:st; padding:0; }
+  ol.steps > li { counter-increment:st; display:grid; grid-template-columns:2.2rem 1fr; gap:1rem;
+                  padding:.9rem 0; border-bottom:1px solid var(--rule-soft); max-width:none; margin:0; }
+  ol.steps > li::before { content:counter(st); font-family:var(--mono); font-size:.9rem;
+    color:var(--accent); font-weight:700; }
+
+  @media (max-width:900px) {
+    .shell { grid-template-columns:1fr; gap:2rem; }
+    .toc { position:static; border-bottom:1px solid var(--rule); padding-bottom:1rem; }
+    .toc ol { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
+  }
+  @media (prefers-reduced-motion:reduce) { .doc * { transition:none !important; } }
+</style>
+
+<div class="doc">
+<div class="wrap">
+
+  <header class="hero">
+    <p class="kicker">Guide for new engineers</p>
+    <h1>How the ticketing system works</h1>
+    <p class="standfirst">Start here. This guide explains what we built and — more importantly —
+      <em>why</em> it is built that way. No prior knowledge of the codebase is assumed. Read it in
+      order; each section builds on the one before.</p>
+  </header>
+
+  <div class="shell">
+    <nav class="toc" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s1"><span class="n">1</span> What we're building</a></li>
+        <li><a href="#s2"><span class="n">2</span> The words we use</a></li>
+        <li><a href="#s3"><span class="n">3</span> Rooms vs shows</a></li>
+        <li><a href="#s4"><span class="n">4</span> Two ways to sell</a></li>
+        <li><a href="#s5"><span class="n">5</span> The hardest problem</a></li>
+        <li><a href="#s6"><span class="n">6</span> How we solve it</a></li>
+        <li><a href="#s7"><span class="n">7</span> Why holds exist</a></li>
+        <li><a href="#s8"><span class="n">8</span> Paying safely</a></li>
+        <li><a href="#s9"><span class="n">9</span> When things break</a></li>
+        <li><a href="#s10"><span class="n">10</span> Making it fast</a></li>
+        <li><a href="#s11"><span class="n">11</span> Stopping abuse</a></li>
+        <li><a href="#s12"><span class="n">12</span> Glossary</a></li>
+        <li><a href="#s13"><span class="n">13</span> Where to look</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+    <section id="s1">
+      <h2 class="sec"><span class="n">1</span> What we're building</h2>
+      <p>A system that sells tickets to events. Someone opens an app, picks a concert, chooses where
+        they want to sit, pays, and receives a ticket.</p>
+      <p>That sounds simple, and for one customer it is. It becomes hard when <strong>thousands of
+        people want the same seats at the same second</strong> and real money is involved. Almost
+        every design decision in this codebase exists because of that sentence.</p>
+
+      <p>There are two applications:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Application</th><th>Who uses it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="term">event&#8209;ticketing</td><td>Customers, via the mobile app</td>
+                <td>The main API. Owns the database. All the rules live here.</td></tr>
+            <tr><td class="term">admin</td><td>Venue staff</td>
+                <td>A web back-office for drawing halls and creating events. Stores nothing itself —
+                    it calls the API.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card idea">
+        <span class="lbl">Key idea</span>
+        <p>The admin app has <strong>no database of its own</strong>. If it did, we would have two
+          copies of the rules that could disagree. One owner of the data means one version of the
+          truth.</p>
+      </div>
+    </section>
+
+    <section id="s2">
+      <h2 class="sec"><span class="n">2</span> The words we use</h2>
+      <p>These names appear everywhere in the code. Learn these seven and most of the codebase reads
+        naturally.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Word</th><th>Means</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td class="term">Organizer</td><td>The company putting on shows</td><td>“City Concerts Ltd”</td></tr>
+            <tr><td class="term">Hall</td><td>A physical room</td><td>“The Grand Theatre”</td></tr>
+            <tr><td class="term">Section</td><td>An area drawn inside a hall</td><td>“Balcony Left”</td></tr>
+            <tr><td class="term">Seat</td><td>One physical chair</td><td>Row A, seat 5</td></tr>
+            <tr><td class="term">Event</td><td>A show happening on a date</td><td>“Symphony Night, 14 March”</td></tr>
+            <tr><td class="term">Booking</td><td>A customer's order</td><td>2 seats, awaiting payment</td></tr>
+            <tr><td class="term">Ticket</td><td>Proof of purchase, issued after payment</td><td><code>TKT-42-001</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart TD
+    O["Organizer&lt;br/&gt;City Concerts Ltd"] --&gt; E["Event&lt;br/&gt;Symphony Night, 14 March"]
+    H["Hall&lt;br/&gt;The Grand Theatre"] --&gt; E
+    H --&gt; S1["Section: Stalls"]
+    H --&gt; S2["Section: Balcony Left"]
+    S1 --&gt; ST["Seats: A1, A2, A3 …"]
+    E --&gt; B["Booking&lt;br/&gt;made by a customer"]
+    B --&gt; T["Tickets&lt;br/&gt;issued after payment"]
+</pre>
+        </div>
+        <figcaption>How the pieces fit together. Read it top to bottom: an organizer puts on an event, which happens in a hall, which contains sections and seats.</figcaption>
+      </figure>
+    </section>
+
+    <section id="s3">
+      <h2 class="sec"><span class="n">3</span> Why rooms and shows are separate</h2>
+      <p>A beginner might store “seat A5 costs 50” and be done. We deliberately don't. Here's why.</p>
+
+      <div class="card analogy">
+        <span class="lbl">Think of it like</span>
+        <p>A cinema screen exists all year. Films come and go. The <em>room</em> doesn't change when the
+          film changes — but the <em>price</em> absolutely does. A blockbuster on Saturday night costs
+          more than a Tuesday matinée, in the exact same seat.</p>
+      </div>
+
+      <p>So we split them:</p>
+      <ul>
+        <li>The <strong>hall</strong> describes the room — where the seats are, what shape the sections
+          are. It rarely changes.</li>
+        <li>The <strong>event</strong> describes one show — the date, and <strong>the price of every
+          section</strong>.</li>
+      </ul>
+
+      <div class="card idea">
+        <span class="lbl">Key idea</span>
+        <p>A section has <strong>no price of its own</strong>. Prices live on the event. If you look for
+          a price field on <code>Section</code>, you won't find one — that's intentional, not an
+          oversight. An event cannot be published until every section has been given a price.</p>
+      </div>
+
+      <h3>Sections are shapes, not labels</h3>
+      <p>A section isn't just the word “Balcony”. It's an actual <strong>shape drawn on a map</strong> —
+        stored as a list of corner points. Staff draw it in the admin editor: a rectangle, a circle, a
+        curve, or any free-form outline.</p>
+      <p>The system then works out which seats are inside that shape, mathematically. Staff never have
+        to say “seats A1 through A20 belong to the Balcony” — they draw a shape around them and the
+        computer figures it out.</p>
+    </section>
+
+    <section id="s4">
+      <h2 class="sec"><span class="n">4</span> Two ways to sell a ticket</h2>
+      <p>Not every ticket is a numbered seat. A hall can do both at once.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Reserved seating</th><th>General admission</th></tr></thead>
+          <tbody>
+            <tr><td class="term">You buy</td><td>Specific seats: “A5 and A6”</td><td>A quantity: “3 tickets”</td></tr>
+            <tr><td class="term">Like</td><td>A theatre</td><td>A standing concert floor</td></tr>
+            <tr><td class="term">The limit is</td><td>Each seat exists once</td><td>A capacity number, e.g. 500</td></tr>
+            <tr><td class="term">In code</td><td class="mono">SEATED</td><td class="mono">GENERAL_ADMISSION</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>This distinction matters more than it looks, because the two need <strong>completely
+        different protection</strong> against overselling. Sections 5 and 6 explain why.</p>
+    </section>
+
+    <section id="s5">
+      <h2 class="sec"><span class="n">5</span> The hardest problem: two people, one seat</h2>
+
+      <p>Imagine Sara in Amman and Omar in Dubai. Both are looking at seat A5. Both screens say
+        “available”. Both tap <em>Book</em> at the same instant.</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+sequenceDiagram
+    actor Sara
+    actor Omar
+    participant Server
+    participant DB as Database
+
+    Sara-&gt;&gt;Server: Book seat A5
+    Omar-&gt;&gt;Server: Book seat A5
+    Server-&gt;&gt;DB: Is A5 free? (for Sara)
+    DB--&gt;&gt;Server: Yes
+    Server-&gt;&gt;DB: Is A5 free? (for Omar)
+    DB--&gt;&gt;Server: Yes — nobody has saved yet!
+    Server-&gt;&gt;DB: Save Sara's booking
+    Server-&gt;&gt;DB: Save Omar's booking
+    Note over DB: One seat. Two owners. Disaster.
+</pre>
+        </div>
+        <figcaption>Both checks happen before either save completes, so both are told “yes”. This is called a race condition — two operations racing, and the result depends on who wins.</figcaption>
+      </figure>
+
+      <p>The trap is that <strong>the code looks perfectly correct</strong>. “Check if free, then book”
+        is exactly what you'd write. It works every time you test it by hand. It fails only when two
+        requests overlap by a few milliseconds — which, on a busy on-sale, is constantly.</p>
+
+      <div class="card watch">
+        <span class="lbl">Remember this</span>
+        <p>You can never fix a race condition by checking more carefully in your code. Between your
+          check and your save, the world can change. The fix has to come from somewhere that can
+          decide <em>atomically</em> — in one indivisible step.</p>
+      </div>
+    </section>
+
+    <section id="s6">
+      <h2 class="sec"><span class="n">6</span> How we actually solve it</h2>
+      <p>We let <strong>the database</strong> be the referee, because it is the one place that can
+        make a decision no one can interrupt.</p>
+
+      <div class="card analogy">
+        <span class="lbl">Think of it like</span>
+        <p>A bouncer with a guest list. Two people can both <em>believe</em> they're on the list, but
+          only one can physically get through the door. The bouncer doesn't care how fast they run
+          or how convinced they are.</p>
+      </div>
+
+      <p>We gave the database one unbreakable rule:</p>
+      <div class="card idea">
+        <span class="lbl">The rule</span>
+        <p>No two <strong>active</strong> bookings may name the same seat at the same event.</p>
+      </div>
+
+      <p>Now when Sara and Omar both try, the database accepts the first and <strong>physically
+        refuses</strong> the second. Our code catches that refusal and tells Omar “sorry, just taken”.
+        Both are treated fairly, and the seat is sold exactly once.</p>
+
+      <p>The word <em>active</em> is doing real work. A booking is active while it is being held or has
+        been paid for. Once it's cancelled or expired, it stops being active — and the seat becomes
+        bookable again, automatically.</p>
+
+      <div class="card watch">
+        <span class="lbl">Important for newcomers</span>
+        <p>Our Java code <em>also</em> checks whether a seat is taken before saving. That check exists
+          only to produce a friendly message naming the seats. <strong>It is not what keeps the system
+          correct.</strong> If you ever remove the database rule because “the code already checks”,
+          you will silently start selling seats twice.</p>
+      </div>
+
+      <h3>What about general admission?</h3>
+      <p>Standing tickets have no identity — there's no “ticket number 37” to make unique. The rule
+        instead is “the total sold must not exceed capacity”, which no single-row rule can express.</p>
+      <p>So for those, we do something different: we make everyone <strong>queue for a moment</strong>.
+        One booking at a time is allowed to count the tickets already sold and add its own. It's
+        slower, but for a counter there is no faster safe option.</p>
+    </section>
+
+    <section id="s7">
+      <h2 class="sec"><span class="n">7</span> Why holds exist</h2>
+      <p>When you pick a seat, we don't sell it to you — you haven't paid yet. But we can't leave it
+        available either, or someone takes it while you're typing your card number.</p>
+      <p>So we set it aside temporarily. That's a <strong>hold</strong>, and it lasts 10 minutes.</p>
+
+      <div class="card analogy">
+        <span class="lbl">Think of it like</span>
+        <p>A taxi you've booked but not yet got into. It's not yours forever — if you don't show up,
+          the driver leaves and takes another fare.</p>
+      </div>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --&gt; Available
+    Available --&gt; Held : you pick it
+    Held --&gt; Booked : you pay
+    Held --&gt; Available : 10 minutes pass, or you cancel
+    Booked --&gt; [*] : ticket issued
+</pre>
+        </div>
+        <figcaption>The life of a seat. Only "Held" and "Booked" take it off sale — everything else means it's available to someone else.</figcaption>
+      </figure>
+
+      <h3>Who gives the seat back?</h3>
+      <p>Two things do, and having both is deliberate:</p>
+      <ol class="steps">
+        <li><strong>The next customer.</strong> When anyone tries to book that same event, we first
+          sweep up any holds that have run out. Popular events clean themselves up constantly, for free.</li>
+        <li><strong>A background job.</strong> Every 30 seconds, a job tidies up holds for events nobody
+          is looking at.</li>
+      </ol>
+
+      <div class="card idea">
+        <span class="lbl">Key idea</span>
+        <p>A hold's expiry time is written on the booking itself. So a hold is expired the <em>moment</em>
+          its time passes — not when some job gets round to noticing. If the background job broke and
+          stopped forever, the system would still be <strong>correct</strong>; it would just leave tidy-up
+          work undone on quiet events.</p>
+      </div>
+    </section>
+
+    <section id="s8">
+      <h2 class="sec"><span class="n">8</span> Taking payment safely</h2>
+      <p>Charging a card means talking to an outside company, over the internet, and that can take a few
+        seconds. A few seconds is an eternity for a database.</p>
+
+      <p>So we deliberately split payment into three steps:</p>
+
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart LR
+    A["1 · Write down&lt;br/&gt;'about to charge'"] --&gt; B["2 · Charge the card&lt;br/&gt;(talking to the bank)"]
+    B --&gt; C["3 · Write down&lt;br/&gt;what happened"]
+</pre>
+        </div>
+        <figcaption>Steps 1 and 3 touch the database and are very fast. Step 2 is slow and happens with the database completely free for other customers.</figcaption>
+      </figure>
+
+      <p>Why bother? Because a database has a limited number of connections. If every customer paying
+        held one open while waiting for a bank, a busy moment would use them all up and
+        <strong>nobody could do anything</strong> — not even browse.</p>
+
+      <h3>The question that shapes everything</h3>
+      <p>Ask yourself: <em>what if the server loses power between steps 2 and 3?</em></p>
+      <p>The customer's card is charged. Our database has no record of it. Without a plan, that money
+        vanishes into a gap.</p>
+
+      <p>This is exactly why step 1 exists. Before we charge anyone, we write down “we are about to
+        charge this person”. That note survives a crash. A background job then checks every unfinished
+        note against the payment company:</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>What the payment company says</th><th>What we do</th></tr></thead>
+          <tbody>
+            <tr><td>No charge was made</td><td>Mark it failed. Nothing was taken.</td></tr>
+            <tr><td>Charged, and the seats are still held</td><td>Finish the booking. Send the tickets.</td></tr>
+            <tr><td>Charged, but the hold ran out</td><td><strong>Refund the customer automatically.</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Charging twice by accident</h3>
+      <p>If we retry a charge after a timeout, could we take money twice? No — every charge carries a
+        unique code.</p>
+
+      <div class="card analogy">
+        <span class="lbl">Think of it like</span>
+        <p>A receipt number. If you hand the same receipt number to the cashier again, they say
+          “I've already done this one” instead of charging you a second time.</p>
+      </div>
+
+      <p>One subtlety worth understanding, because it caused a real bug: that code must change when the
+        customer <em>genuinely</em> tries again with a different card. Otherwise the payment company
+        helpfully replays the old refusal, and the customer can never pay. So the code includes an
+        attempt number: <code>booking-42-1</code>, then <code>booking-42-2</code>.</p>
+    </section>
+
+    <section id="s9">
+      <h2 class="sec"><span class="n">9</span> When things break</h2>
+      <p>Real systems fail. Servers restart, networks drop, banks time out. The design assumes this
+        rather than hoping otherwise.</p>
+
+      <div class="card idea">
+        <span class="lbl">The promise we make</span>
+        <p><strong>We never keep someone's money without giving them their seats, and we never give
+          away seats we haven't been paid for.</strong> Every failure resolves to one or the other.</p>
+      </div>
+
+      <p>The tool that makes this work is that “about to charge” note. As long as it exists, we know
+        something is unfinished, and a job keeps working on it until it's resolved.</p>
+
+      <h3>When a problem can't be solved automatically</h3>
+      <p>Occasionally something can't be resolved — a refund keeps being rejected, or our credentials
+        for the payment company expired. Retrying forever would be pointless and would slow down every
+        other payment waiting behind it.</p>
+      <p>So after several attempts, spaced further and further apart, we <strong>park it for a human</strong>
+        and stop retrying. Staff get a list showing the amount, the customer, and the reference number to
+        search for at the payment company.</p>
+      <p>This is called a <em>dead letter</em> — a message nobody could deliver, set aside for a person
+        to handle instead of thrown away.</p>
+    </section>
+
+    <section id="s10">
+      <h2 class="sec"><span class="n">10</span> Making it fast</h2>
+      <p>When tickets go on sale, far more people are <em>looking</em> than <em>buying</em>. Thousands
+        refresh the seat map; a handful actually book.</p>
+      <p>Asking the database to redraw the whole seat map for every viewer would exhaust it. So we keep
+        a ready-made copy in a fast store called <strong>Redis</strong>, and serve most viewers from
+        that copy.</p>
+
+      <div class="card analogy">
+        <span class="lbl">Think of it like</span>
+        <p>A photocopy of a noticeboard by the entrance, so a hundred people don't crowd around the
+          original.</p>
+      </div>
+
+      <p>The copy is kept for only a couple of seconds — long enough to absorb the crowd, short enough
+        that nobody stares at badly out-of-date information.</p>
+
+      <div class="card idea">
+        <span class="lbl">Why a stale copy is safe</span>
+        <p>Worst case, someone taps a seat that has just gone and is told “sorry, taken”. Slightly
+          annoying — but <strong>never wrong</strong>, because buying still goes through the database
+          and its unbreakable rule. The copy only affects what people <em>see</em>, never what they
+          <em>get</em>.</p>
+      </div>
+
+      <p>One refinement worth knowing: we make each copy expire at a slightly <em>random</em> time. If
+        every copy expired at the same instant, all those viewers would hit the database together — the
+        stampede we were trying to avoid, arriving on a schedule.</p>
+    </section>
+
+    <section id="s11">
+      <h2 class="sec"><span class="n">11</span> Stopping people gaming the system</h2>
+      <p>If holding a seat is free and easy, someone will hold every seat in the venue and sell none of
+        them — a way to sabotage an on-sale, or to hoard tickets. Four limits work together:</p>
+
+      <ol class="steps">
+        <li><strong>You must say who you are.</strong> Identity comes from a login token, never from
+          something the app can type in. You cannot limit a person you cannot recognise.</li>
+        <li><strong>At most 10 seats per request.</strong> So one request can't lock a whole venue.</li>
+        <li><strong>One live hold at a time.</strong> Finish or cancel before starting another.</li>
+        <li><strong>A limit on holds you don't pay for.</strong> Paying clears your record instantly,
+          so genuine buyers are never slowed down. Only people who repeatedly take seats off sale and
+          never buy get blocked.</li>
+      </ol>
+
+      <div class="card idea">
+        <span class="lbl">Why the fourth one is designed that way</span>
+        <p>A naive limit like “5 bookings per minute” punishes the wrong person: a decisive buyer looks
+          identical to a hoarder. Counting <em>unpaid</em> holds instead targets the behaviour we
+          actually object to — taking inventory off sale and never buying it.</p>
+      </div>
+    </section>
+
+    <section id="s12">
+      <h2 class="sec"><span class="n">12</span> Glossary</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Term</th><th>In plain words</th></tr></thead>
+          <tbody>
+            <tr><td class="term">Race condition</td><td>Two operations overlapping, where the result depends on who happens to finish first</td></tr>
+            <tr><td class="term">Atomic</td><td>Happens completely or not at all — nothing can interrupt halfway</td></tr>
+            <tr><td class="term">Transaction</td><td>A group of database changes that all succeed together or are all undone</td></tr>
+            <tr><td class="term">Rollback</td><td>Undoing a transaction, as if it never happened</td></tr>
+            <tr><td class="term">Constraint</td><td>A rule the database itself enforces and will not let you break</td></tr>
+            <tr><td class="term">Lock</td><td>Making others wait so only one operation touches something at a time</td></tr>
+            <tr><td class="term">Hold</td><td>A seat set aside temporarily while a customer pays</td></tr>
+            <tr><td class="term">Expiry</td><td>The moment a hold stops counting and the seat returns to sale</td></tr>
+            <tr><td class="term">Idempotent</td><td>Safe to repeat — doing it twice has the same effect as once</td></tr>
+            <tr><td class="term">Reconciliation</td><td>Checking our records against the payment company's and fixing differences</td></tr>
+            <tr><td class="term">Dead letter</td><td>Something that couldn't be processed, set aside for a human</td></tr>
+            <tr><td class="term">Cache</td><td>A fast temporary copy, to avoid repeating slow work</td></tr>
+            <tr><td class="term">Migration</td><td>A numbered script that changes the database structure</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s13">
+      <h2 class="sec"><span class="n">13</span> Where to look in the code</h2>
+      <p>A reading order for your first week:</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Read</th><th>To understand</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">V2__reservation_schema.sql</td><td>The unbreakable rule from §6. Start here — it's the heart of the system</td></tr>
+            <tr><td class="mono">ReservationService.createBooking</td><td>What happens when someone books</td></tr>
+            <tr><td class="mono">PaymentService.pay</td><td>The three payment steps from §8</td></tr>
+            <tr><td class="mono">PaymentReconciliationJob</td><td>How broken payments get fixed</td></tr>
+            <tr><td class="mono">HoldSweeper</td><td>How abandoned seats come back</td></tr>
+            <tr><td class="mono">ConcurrentBookingIntegrationTest</td><td>Proof the race in §5 really is prevented</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card watch">
+        <span class="lbl">Before you change anything</span>
+        <p>If a piece of code looks strangely complicated, assume it's solving a problem you haven't hit
+          yet — especially around payments and holds. Read the comment above it first. Most of the odd-looking
+          parts exist because of a specific failure that already happened once.</p>
+      </div>
+
+      <div class="card idea">
+        <span class="lbl">The three ideas to take away</span>
+        <p><strong>1.</strong> Correctness lives in the database, not in the code.<br>
+           <strong>2.</strong> Never hold a database transaction open while waiting for the outside world.<br>
+           <strong>3.</strong> Assume every step can fail, and make sure something can always finish the job.</p>
+      </div>
+    </section>
+
+    </main>
+  </div>
+</div>
+</div>

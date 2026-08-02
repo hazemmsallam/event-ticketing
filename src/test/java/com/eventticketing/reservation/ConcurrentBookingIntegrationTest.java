@@ -11,6 +11,8 @@ import com.eventticketing.catalog.service.EventService;
 import com.eventticketing.catalog.service.HallService;
 import com.eventticketing.catalog.service.OrganizerService;
 import com.eventticketing.common.exception.ConflictException;
+import com.eventticketing.common.security.CustomerId;
+import com.eventticketing.common.security.TokenAuthenticator;
 import com.eventticketing.reservation.domain.BookingSeatStatus;
 import com.eventticketing.reservation.dto.BookingResponse;
 import com.eventticketing.reservation.dto.CreateBookingRequest;
@@ -35,6 +37,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Proves that concurrent attempts to book the same seat result in exactly one success,
@@ -92,7 +95,8 @@ class ConcurrentBookingIntegrationTest {
                 try {
                     startGate.await();
                     reservationService.createBooking(
-                            new CreateBookingRequest(eventId, "user-" + n, List.of(seatId), null, null));
+                            new CreateBookingRequest(eventId, List.of(seatId), null, null),
+                            customer("user-" + n));
                     success.incrementAndGet();
                 } catch (ConflictException e) {
                     conflicts.incrementAndGet();
@@ -131,17 +135,57 @@ class ConcurrentBookingIntegrationTest {
                         new PricingItem(hall.sections().get(0).id(), new BigDecimal("25.00")))));
         eventService.updateStatus(eventId, EventStatus.PUBLISHED);
 
-        BookingResponse first = reservationService.createBooking(
-                new CreateBookingRequest(eventId, "history-user", null, null, 1));
-        reservationService.createBooking(
-                new CreateBookingRequest(eventId, "other-user", null, null, 1));
-        BookingResponse second = reservationService.createBooking(
-                new CreateBookingRequest(eventId, "history-user", null, null, 2));
+        CustomerId shopper = customer("history-user");
+        CustomerId other = customer("other-user");
 
-        List<BookingResponse> history = reservationService.listBookings("history-user");
+        BookingResponse first = reservationService.createBooking(
+                new CreateBookingRequest(eventId, null, null, 1), shopper);
+        // Only one live hold per customer is allowed, so release the first before booking again.
+        reservationService.cancelBooking(first.id(), shopper.ref());
+        reservationService.createBooking(new CreateBookingRequest(eventId, null, null, 1), other);
+        BookingResponse second = reservationService.createBooking(
+                new CreateBookingRequest(eventId, null, null, 2), shopper);
+
+        List<BookingResponse> history = reservationService.listBookings(shopper.ref());
 
         assertThat(history).extracting(BookingResponse::id).containsExactly(second.id(), first.id());
-        assertThat(history).extracting(BookingResponse::customerRef).containsOnly("history-user");
+        assertThat(history).extracting(BookingResponse::customerRef).containsOnly(shopper.ref());
         assertThat(history).extracting(BookingResponse::eventName).containsOnly("History Show");
+    }
+
+    /**
+     * The seat-squatting control: one customer may only park inventory once at a time, so an
+     * abuser cannot accumulate holds across events by repeating the call.
+     */
+    @Test
+    void rejectsASecondHoldWhileTheFirstIsStillLive() {
+        Long organizerId = organizerService.create(
+                new CreateOrganizerRequest("Quota Events", "quota@example.com", "+102")).id();
+        HallResponse hall = hallService.create(new CreateHallRequest(
+                "Quota Arena", "3 Main St", false, null, null, null, 20));
+        Instant start = Instant.now().plus(2, ChronoUnit.DAYS);
+        Long eventId = eventService.create(new CreateEventRequest(
+                "Quota Show", "desc", "Music", start, start.plus(2, ChronoUnit.HOURS),
+                organizerId, hall.id(), 20)).id();
+        eventService.setPricing(eventId, new SetEventPricingRequest(List.of(
+                new PricingItem(hall.sections().get(0).id(), new BigDecimal("15.00")))));
+        eventService.updateStatus(eventId, EventStatus.PUBLISHED);
+
+        CustomerId squatter = customer("squatter");
+        reservationService.createBooking(new CreateBookingRequest(eventId, null, null, 1), squatter);
+
+        assertThatThrownBy(() -> reservationService.createBooking(
+                new CreateBookingRequest(eventId, null, null, 1), squatter))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already have seats on hold");
+
+        // A different customer is unaffected — the quota is per identity, not global.
+        assertThat(reservationService.createBooking(
+                new CreateBookingRequest(eventId, null, null, 1), customer("someone-else"))).isNotNull();
+    }
+
+    /** Mirrors how TokenAuthenticator derives a stable id, so tests share one identity model. */
+    private static CustomerId customer(String token) {
+        return new TokenAuthenticator().authenticate(token);
     }
 }

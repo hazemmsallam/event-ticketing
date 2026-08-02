@@ -6,6 +6,22 @@ spring:
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # The default of 10 is a hard concurrency ceiling: general-admission booking holds a row
+      # lock for the length of its transaction, so a burst can occupy every connection while the
+      # rest of the request threads queue behind them.
+      #
+      # Size it deliberately, and remember the budget is per instance — pool-size x replicas must
+      # stay well under MySQL's max_connections (151 by default).
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: 5
+      # Fail fast instead of queueing. Under a flash sale a request that cannot get a connection
+      # in 3s is already lost to the user; holding it open only deepens the backlog.
+      connection-timeout: 3000
+      validation-timeout: 2000
+      max-lifetime: 1800000
+      # Surfaces a connection held far longer than any legitimate transaction should need.
+      leak-detection-threshold: 20000
   jpa:
     hibernate:
       # Flyway is the single source of truth for the schema; Hibernate never alters it.
@@ -32,17 +48,29 @@ spring:
 app:
   # Set to true to load a small predefined catalog on startup (see DemoDataSeeder).
   seed-demo-data: ${SEED_DEMO_DATA:true}
+  security:
+    # Exposes POST /api/dev/token, which mints valid identities to anyone who asks.
+    # MUST be false in production — it is a stand-in until real authentication lands.
+    dev-tokens-enabled: ${DEV_TOKENS_ENABLED:true}
   reservation:
     # ISO-8601 duration. How long a seat stays HELD before auto-release if unpaid.
     hold-duration: PT10M
-    # Maximum number of seats a single booking may hold.
-    max-seats-per-booking: 2
+    # Maximum number of seats a single booking may hold. Defence in depth behind
+    # CreateBookingRequest.MAX_SEATS, which rejects an oversized payload at the edge.
+    # Keep this small: a large value lets one request lock an entire venue.
+    max-seats-per-booking: 10
     # How often the sweeper job releases expired holds.
     sweep-interval: PT30S
     # How long availability/seat-map reads are cached in Redis. Short by design: a stale
     # entry can never cause a double-booking (the DB unique index still guards writes), it
     # only briefly delays what the UI shows.
     cache-ttl: PT2S
+    # Abuse control aimed at hold churn, not speed: how many holds a customer may open WITHOUT
+    # paying inside the window below. A successful payment clears the tally immediately, so a
+    # buyer is never made to wait — only someone who repeatedly takes inventory off sale and
+    # never buys it will see a 429.
+    unpaid-hold-limit: 5
+    unpaid-hold-window: PT10M
     # How long a payment may sit in the in-doubt INITIATED state before the reconciliation
     # job resolves it (confirm the booking or refund the charge).
     reconcile-after: PT1M

@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
  * database transaction is never held open across the network call to the gateway:
  *
  * <ol>
- *   <li>{@code beginPayment} (txn): validate the hold, persist a Payment as INITIATED.</li>
- *   <li>{@code charge} (no txn): call the gateway with the booking's idempotency key.</li>
+ *   <li>{@code beginPayment} (txn): validate the hold, persist a Payment as INITIATED with the
+ *       key for this attempt.</li>
+ *   <li>{@code charge} (no txn): call the gateway with that attempt's idempotency key.</li>
+ *   <li>{@code recordChargeIssued} (txn): persist the provider reference immediately.</li>
  *   <li>{@code applyPaymentResult} (txn): record the outcome and confirm the booking.</li>
  * </ol>
  *
@@ -46,6 +48,13 @@ public class PaymentService {
                     ctx.paymentId(), bookingId, ex.getMessage());
             throw new BusinessRuleException(
                     "Payment is still processing. Please check the booking status shortly.");
+        }
+
+        // Commit the provider's reference before interpreting the outcome: applyPaymentResult
+        // rolls back when the hold has lapsed, and a reference written inside it would be lost
+        // exactly in the case where reconciliation needs it to issue a refund.
+        if (result.success()) {
+            reservationService.recordChargeIssued(ctx.paymentId(), result.reference());
         }
 
         return reservationService.applyPaymentResult(ctx.paymentId(), result);

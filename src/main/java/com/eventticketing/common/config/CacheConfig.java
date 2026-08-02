@@ -15,9 +15,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter.TtlFunction;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
+
+import java.time.Duration;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Redis caching for the read-heavy availability endpoints. Each cache stores exactly one
@@ -26,6 +30,11 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
  * <p>Caching is best-effort: if Redis is unreachable, {@link #errorHandler()} logs and
  * swallows the error so the request simply falls back to a database read. A stale cache entry
  * can never cause a double-booking — the database unique index still guards every write.
+ *
+ * <p>Entry lifetimes are <strong>jittered</strong>. With a fixed TTL, every entry created during a
+ * burst expires in the same instant, and the next wave of readers all miss together and stampede
+ * the database — the load pattern the cache exists to prevent, arriving on a timer. Spreading
+ * expiry across a window desynchronises them.
  */
 @Configuration
 @EnableCaching
@@ -41,10 +50,26 @@ public class CacheConfig implements CachingConfigurer {
         this.objectMapper = objectMapper;
     }
 
+    /** How far either side of the configured TTL an entry's lifetime may land. */
+    private static final double JITTER_FRACTION = 0.2;
+
+    /**
+     * The configured TTL ±20%, so entries written together do not expire together.
+     * {@link ThreadLocalRandom} keeps this free of contention on the write path.
+     */
+    private Duration jitteredTtl() {
+        long base = properties.cacheTtl().toMillis();
+        long spread = (long) (base * JITTER_FRACTION);
+        if (spread <= 0) {
+            return properties.cacheTtl();
+        }
+        return Duration.ofMillis(base + ThreadLocalRandom.current().nextLong(-spread, spread + 1));
+    }
+
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(properties.cacheTtl())
+                .entryTtl((TtlFunction) (key, value) -> jitteredTtl())
                 .disableCachingNullValues();
 
         return RedisCacheManager.builder(connectionFactory)

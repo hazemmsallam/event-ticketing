@@ -1,0 +1,594 @@
+<title>Event Ticketing — Code Reference</title>
+
+<style>
+  :root {
+    color-scheme: light;
+    --paper:#EFF2F5; --surface:#FFFFFF; --sheet:#F7F9FB;
+    --ink:#16202B; --ink-2:#4A5C6E; --ink-3:#6E8095;
+    --rule:#C7D2DC; --rule-soft:#DDE5EC;
+    --accent:#A85D00; --accent-bg:#F7EAD8;
+    --good:#1B6E4B; --good-bg:#E4F1EA;
+    --crit:#A32B22; --crit-bg:#F7E4E2;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,"Helvetica Neue",sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","Segoe UI Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme:dark;
+      --paper:#0D131A; --surface:#141D26; --sheet:#EEF2F5;
+      --ink:#E3EAF1; --ink-2:#9BAABA; --ink-3:#7A8B9C;
+      --rule:#25323E; --rule-soft:#1D2833;
+      --accent:#E8A44B; --accent-bg:#2A2115;
+      --good:#55B27E; --good-bg:#16271F; --crit:#E8776B; --crit-bg:#2B1B19; }
+  }
+  :root[data-theme="dark"] { color-scheme:dark;
+    --paper:#0D131A; --surface:#141D26; --sheet:#EEF2F5;
+    --ink:#E3EAF1; --ink-2:#9BAABA; --ink-3:#7A8B9C;
+    --rule:#25323E; --rule-soft:#1D2833; --accent:#E8A44B; --accent-bg:#2A2115;
+    --good:#55B27E; --good-bg:#16271F; --crit:#E8776B; --crit-bg:#2B1B19; }
+  :root[data-theme="light"] { color-scheme:light;
+    --paper:#EFF2F5; --surface:#FFFFFF; --sheet:#F7F9FB;
+    --ink:#16202B; --ink-2:#4A5C6E; --ink-3:#6E8095;
+    --rule:#C7D2DC; --rule-soft:#DDE5EC; --accent:#A85D00; --accent-bg:#F7EAD8;
+    --good:#1B6E4B; --good-bg:#E4F1EA; --crit:#A32B22; --crit-bg:#F7E4E2; }
+
+  .doc { background:var(--paper); color:var(--ink); font-family:var(--sans);
+         font-size:16px; line-height:1.65; padding:0 0 5rem; }
+  .doc *,.doc *::before,.doc *::after { box-sizing:border-box; }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 1.5rem; }
+
+  .titleblock { border:1px solid var(--rule); background:var(--surface);
+                margin:2.5rem 0 3rem; display:grid; grid-template-columns:1fr auto; }
+  .titleblock > div { padding:1.5rem 1.75rem; }
+  .tb-main { border-right:1px solid var(--rule); }
+  .eyebrow { font-family:var(--mono); font-size:.7rem; letter-spacing:.16em; text-transform:uppercase;
+             color:var(--accent); margin:0 0 .6rem; }
+  .titleblock h1 { font-size:clamp(1.6rem,3.4vw,2.35rem); line-height:1.15; letter-spacing:-.022em;
+                   margin:0 0 .7rem; text-wrap:balance; font-weight:620; }
+  .tb-sub { color:var(--ink-2); margin:0; max-width:58ch; }
+  .tb-meta { font-family:var(--mono); font-size:.74rem; line-height:1.9; color:var(--ink-2); white-space:nowrap; }
+  .tb-meta b { font-weight:600; display:block; font-size:.66rem; letter-spacing:.12em;
+               text-transform:uppercase; color:var(--ink-3); }
+
+  .shell { display:grid; grid-template-columns:210px minmax(0,1fr); gap:3.5rem; align-items:start; }
+  .toc { position:sticky; top:1.5rem; font-family:var(--mono); font-size:.76rem; }
+  .toc h2 { font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3);
+            margin:0 0 .85rem; font-weight:600; }
+  .toc ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.1rem; }
+  .toc a { display:flex; gap:.6rem; padding:.32rem .4rem; color:var(--ink-2); text-decoration:none;
+           border-left:2px solid transparent; }
+  .toc a:hover { color:var(--accent); border-left-color:var(--accent); background:var(--rule-soft); }
+  .toc a .n { color:var(--ink-3); }
+
+  main { min-width:0; }
+  section { margin:0 0 3.5rem; scroll-margin-top:1.5rem; }
+  h2.sec { display:flex; align-items:baseline; gap:.8rem; font-size:1.32rem; letter-spacing:-.015em;
+           margin:0 0 .3rem; padding-bottom:.7rem; border-bottom:1px solid var(--rule);
+           text-wrap:balance; font-weight:620; }
+  h2.sec .n { font-family:var(--mono); font-size:.82rem; color:var(--accent); flex:none; }
+  h3 { font-size:1rem; margin:2rem 0 .5rem; font-weight:620; letter-spacing:-.01em; }
+  p,li { max-width:72ch; }
+  p { margin:.85rem 0; }
+  ul { padding-left:1.15rem; margin:.85rem 0; }
+  li { margin:.3rem 0; }
+  code { font-family:var(--mono); font-size:.855em; background:var(--rule-soft);
+         padding:.1em .38em; border-radius:3px; }
+  a { color:var(--accent); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  .note { border-left:3px solid var(--accent); background:var(--accent-bg);
+          padding:.9rem 1.1rem; margin:1.4rem 0; max-width:72ch; }
+  .note.crit { border-left-color:var(--crit); background:var(--crit-bg); }
+  .note.good { border-left-color:var(--good); background:var(--good-bg); }
+  .note p { margin:.35rem 0; }
+  .note .lbl { font-family:var(--mono); font-size:.68rem; letter-spacing:.13em; text-transform:uppercase;
+               color:var(--accent); display:block; margin-bottom:.35rem; }
+  .note.crit .lbl { color:var(--crit); }
+  .note.good .lbl { color:var(--good); }
+
+  figure.sheet { margin:1.75rem 0; background:var(--sheet); border:1px solid var(--rule); color-scheme:light; }
+  figure.sheet .body { overflow-x:auto; padding:1.5rem; }
+  figure.sheet pre.mermaid { margin:0; background:none; padding:0; min-width:520px; }
+  figure.sheet figcaption { font-family:var(--mono); font-size:.7rem; letter-spacing:.1em;
+    text-transform:uppercase; color:#5A6B7C; padding:.65rem 1rem; border-top:1px solid #D6DEE6; }
+
+  .tw { overflow-x:auto; margin:1.4rem 0; border:1px solid var(--rule); background:var(--surface); }
+  table { border-collapse:collapse; width:100%; font-size:.86rem; min-width:640px; }
+  th,td { text-align:left; padding:.6rem .8rem; border-bottom:1px solid var(--rule-soft); vertical-align:top; }
+  th { font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase;
+       color:var(--ink-3); font-weight:600; border-bottom:1px solid var(--rule); white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:none; }
+  td.mono,th.mono { font-family:var(--mono); font-size:.8rem; }
+  td.needs { font-family:var(--mono); font-size:.78rem; color:var(--ink-2); }
+
+  /* Block cards */
+  .block { border:1px solid var(--rule); background:var(--surface); margin:1.2rem 0; }
+  .block > header { display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap;
+                    padding:.75rem 1rem; border-bottom:1px solid var(--rule-soft); background:var(--sheet);
+                    color:#16202B; }
+  .block > header .name { font-family:var(--mono); font-weight:700; font-size:.9rem; }
+  .block > header .role { font-size:.78rem; color:#5A6B7C; }
+  .block .body { padding:.9rem 1rem; }
+  .block .row { display:grid; grid-template-columns:5.5rem 1fr; gap:.6rem; padding:.28rem 0;
+                font-size:.86rem; align-items:baseline; }
+  .block .row dt { font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase;
+                   color:var(--ink-3); }
+  .block .row dd { margin:0; max-width:none; }
+  .block .row dd.deps { font-family:var(--mono); font-size:.8rem; color:var(--ink-2); }
+  dl { margin:0; }
+
+  @media (max-width:900px) {
+    .shell { grid-template-columns:1fr; gap:2rem; }
+    .toc { position:static; border-bottom:1px solid var(--rule); padding-bottom:1rem; }
+    .toc ol { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+    .titleblock { grid-template-columns:1fr; }
+    .tb-main { border-right:none; border-bottom:1px solid var(--rule); }
+    .block .row { grid-template-columns:1fr; gap:.1rem; }
+  }
+  @media (prefers-reduced-motion:reduce) { .doc * { transition:none !important; } }
+</style>
+
+<div class="doc">
+<div class="wrap">
+
+  <header class="titleblock">
+    <div class="tb-main">
+      <p class="eyebrow">Code Reference</p>
+      <h1>Every block, and what it needs</h1>
+      <p class="tb-sub">A component-by-component map of the API: what each block is responsible for,
+        what it depends on, what depends on it, and what will bite you if you change it.</p>
+    </div>
+    <div class="tb-meta">
+      <b>Classes</b>123 main
+      <b>Packages</b>16
+      <b>Runtime</b>MySQL 8 · Redis · JDK 21+
+      <b>Schema</b>Flyway V1–V13
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="toc" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s0"><span class="n">00</span> How to read this</a></li>
+        <li><a href="#s1"><span class="n">01</span> Runtime needs</a></li>
+        <li><a href="#s2"><span class="n">02</span> Layer map</a></li>
+        <li><a href="#s3"><span class="n">03</span> Web layer</a></li>
+        <li><a href="#s4"><span class="n">04</span> Security</a></li>
+        <li><a href="#s5"><span class="n">05</span> Reservation core</a></li>
+        <li><a href="#s6"><span class="n">06</span> Payment</a></li>
+        <li><a href="#s7"><span class="n">07</span> Background jobs</a></li>
+        <li><a href="#s8"><span class="n">08</span> Catalog</a></li>
+        <li><a href="#s9"><span class="n">09</span> Geometry</a></li>
+        <li><a href="#s10"><span class="n">10</span> Infrastructure</a></li>
+        <li><a href="#s11"><span class="n">11</span> Errors</a></li>
+        <li><a href="#s12"><span class="n">12</span> Config keys</a></li>
+        <li><a href="#s13"><span class="n">13</span> Dependency rules</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+    <section id="s0">
+      <h2 class="sec"><span class="n">00</span> How to read this</h2>
+      <p>Each block below is described the same way, so you can scan for what you need:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Field</th><th>Answers</th></tr></thead>
+          <tbody>
+            <tr><td class="term"><strong>Does</strong></td><td>Its one responsibility</td></tr>
+            <tr><td class="term"><strong>Needs</strong></td><td>What it is given at construction, plus any infrastructure it cannot work without</td></tr>
+            <tr><td class="term"><strong>Used by</strong></td><td>Who calls it — change it and these are affected</td></tr>
+            <tr><td class="term"><strong>Watch</strong></td><td>The non-obvious thing that breaks if you change it carelessly</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Every dependency listed was read from the class's constructor, so it reflects the code rather
+        than an intention.</p>
+    </section>
+
+    <section id="s1">
+      <h2 class="sec"><span class="n">01</span> What the application needs to run</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Dependency</th><th>Required?</th><th>Used for</th><th>If missing</th></tr></thead>
+          <tbody>
+            <tr><td class="term">MySQL 8</td><td><strong>Yes</strong></td>
+                <td>All data; the uniqueness rule that prevents double-booking</td>
+                <td>Application will not start</td></tr>
+            <tr><td class="term">Redis</td><td>Degraded</td>
+                <td>Read cache, rate limits, scheduler leases</td>
+                <td>Runs, but every read hits the database and limits stop applying</td></tr>
+            <tr><td class="term">JDK 21+</td><td><strong>Yes</strong></td><td>Records, pattern switches, text blocks</td><td>Will not compile</td></tr>
+            <tr><td class="term">Payment provider</td><td>Stubbed</td><td>Charging, refunds, lookups</td>
+                <td>Currently <code>FakePaymentGateway</code> always approves</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note crit">
+        <span class="lbl">Schema ownership</span>
+        <p>Flyway owns the schema; Hibernate must stay on <code>ddl-auto: validate</code>. With
+          <code>update</code> or <code>create</code>, Hibernate rebuilds tables from the entity classes
+          and cannot see the generated <code>active_lock</code> column — silently deleting the
+          double-booking guard. <code>SchemaGuardIntegrationTest</code> exists to catch this.</p>
+      </div>
+    </section>
+
+    <section id="s2">
+      <h2 class="sec"><span class="n">02</span> Layer map</h2>
+      <figure class="sheet">
+        <div class="body">
+<pre class="mermaid">
+flowchart TD
+    WEB["web.mobile · web.admin&lt;br/&gt;controllers — HTTP only"]
+    SEC["common.security&lt;br/&gt;identity · throttles"]
+    RES["reservation.service&lt;br/&gt;ReservationService · PaymentService"]
+    CAT["catalog.service&lt;br/&gt;HallService · EventService"]
+    JOBS["jobs&lt;br/&gt;HoldSweeper · Reconciler"]
+    REPO["repositories&lt;br/&gt;Spring Data JPA"]
+    GW["payment.PaymentGateway&lt;br/&gt;interface"]
+    INFRA[("MySQL · Redis")]
+
+    WEB --&gt; SEC
+    WEB --&gt; RES
+    WEB --&gt; CAT
+    JOBS --&gt; RES
+    JOBS --&gt; GW
+    RES --&gt; REPO
+    RES --&gt; SEC
+    CAT --&gt; REPO
+    REPO --&gt; INFRA
+    SEC --&gt; INFRA
+</pre>
+        </div>
+        <figcaption>Dependencies point downward only</figcaption>
+      </figure>
+      <p><code>PaymentService</code> is the one exception worth memorising: it sits beside
+        <code>ReservationService</code> rather than inside it, and that separation is load-bearing —
+        see §06.</p>
+    </section>
+
+    <section id="s3">
+      <h2 class="sec"><span class="n">03</span> Web layer — <code>web.mobile</code>, <code>web.admin</code></h2>
+      <p>Controllers do three things only: bind and validate input, call one service, map the result.
+        No business logic lives here.</p>
+
+      <div class="block">
+        <header><span class="name">BookingController</span><span class="role">/api/bookings — the customer's whole journey</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Hold, list, view, change seats, pay, cancel</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">ReservationService · PaymentService · UnpaidHoldThrottle</dd></div>
+          <div class="row"><dt>Used by</dt><dd>Mobile app</dd></div>
+          <div class="row"><dt>Watch</dt><dd>Identity comes from <code>@CurrentCustomer</code>, never the request body. Adding a <code>customerRef</code> parameter would let a caller impersonate anyone and defeat every quota.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">EventBrowseController</span><span class="role">/api/events — read-only discovery</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>List published events, seat map, availability</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">EventService · ReservationService</dd></div>
+          <div class="row"><dt>Watch</dt><dd>The two heavy endpoints are cached. Adding a per-customer field to those responses would poison the shared cache — the key is the event id only.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">DevTokenController</span><span class="role">/api/dev — test identities</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Mints tokens so quotas and throttles can be exercised</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">TokenAuthenticator · property <code>app.security.dev-tokens-enabled</code></dd></div>
+          <div class="row"><dt>Watch</dt><dd><strong>Must be disabled in production.</strong> It hands valid credentials to anyone who asks.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">HallController · EventAdminController · OrganizerController · LayoutPresetController</span><span class="role">/api/halls, /api/events, /api/organizers, /api/layout-presets</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Back-office CRUD used by the admin app</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">their matching service, one each</dd></div>
+          <div class="row"><dt>Watch</dt><dd><code>PUT /api/halls/{id}/seats</code> is a <em>full-set reconcile</em>: anything omitted is deleted. Sending a partial list silently destroys data.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">PaymentReviewController</span><span class="role">/api/payments/review — the dead letter</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Lists payments parked for a human; requeues one after a fix</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">ReservationService</dd></div>
+          <div class="row"><dt>Watch</dt><dd>A non-empty list means money may be unaccounted for. This is the endpoint to alert on.</dd></div>
+        </dl></div>
+      </div>
+    </section>
+
+    <section id="s4">
+      <h2 class="sec"><span class="n">04</span> Security — <code>common.security</code></h2>
+
+      <div class="block">
+        <header><span class="name">TokenAuthenticator</span><span class="role">turns a header into an identity</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Maps an <code>Authorization</code> value to a stable <code>CustomerId</code></dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">nothing</dd></div>
+          <div class="row"><dt>Used by</dt><dd>CurrentCustomerArgumentResolver · DevTokenController</dd></div>
+          <div class="row"><dt>Watch</dt><dd><strong>This is a stub, not authentication.</strong> No signature or expiry is checked. The mapping is deliberately deterministic so the same token is the same user — a random UUID per request would silently defeat every limit built on it. Replacing it means resolving the id from a verified token; nothing downstream changes.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">CurrentCustomerArgumentResolver</span><span class="role">injects the caller</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Resolves <code>@CurrentCustomer CustomerId</code> parameters; 401 when the header is absent</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">TokenAuthenticator · registered by WebMvcConfig</dd></div>
+          <div class="row"><dt>Watch</dt><dd>If it is not registered, the parameter silently resolves to null instead of failing.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">RateLimiter</span><span class="role">counting primitive</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Fixed-window counter per subject, with <code>reset</code></dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">StringRedisTemplate · <strong>Redis</strong></dd></div>
+          <div class="row"><dt>Watch</dt><dd><strong>Fails open</strong> — a Redis outage allows the request. Deliberate: this is an abuse control, not a correctness control. Never move a correctness rule into it.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">UnpaidHoldThrottle</span><span class="role">the abuse policy</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Counts holds; a successful payment clears the tally</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">RateLimiter · ReservationProperties</dd></div>
+          <div class="row"><dt>Used by</dt><dd>BookingController (count) · ReservationService (clear on payment)</dd></div>
+          <div class="row"><dt>Watch</dt><dd>Abandonment is tracked by <em>absence</em> of a clear, so cancel and expiry paths need no code here. Adding bookkeeping to them would double-count.</dd></div>
+        </dl></div>
+      </div>
+    </section>
+
+    <section id="s5">
+      <h2 class="sec"><span class="n">05</span> Reservation core — <code>reservation.service</code></h2>
+
+      <div class="block">
+        <header><span class="name">ReservationService</span><span class="role">the centre of the system</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Holds, seat swaps, cancellation, expiry, availability reads, payment state transitions, reconciliation decisions</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">BookingRepository · BookingSeatRepository · PaymentRepository · EventRepository · SeatRepository · SectionRepository · TicketRepository · ReservationProperties · Clock · CacheManager · ObjectMapper · UnpaidHoldThrottle</dd></div>
+          <div class="row"><dt>Used by</dt><dd>BookingController · EventBrowseController · PaymentService · both jobs · PaymentReviewController</dd></div>
+          <div class="row"><dt>Watch</dt><dd>Four invariants live here — see below. It is large because the booking transaction genuinely spans these concerns; splitting it would move logic across transaction boundaries.</dd></div>
+        </dl></div>
+      </div>
+
+      <h3>The four things not to break</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Flush between releasing expired holds and inserting a new one</strong></td>
+                <td>Hibernate orders inserts before updates in one flush, so without it the insert collides with the row being freed</td></tr>
+            <tr><td><strong>Sort seat ids before insert</strong></td>
+                <td>Two overlapping requests taking locks in opposite order deadlock</td></tr>
+            <tr><td><strong>Evict caches <em>after commit</em></strong></td>
+                <td>Evicting inline lets a concurrent reader repopulate from uncommitted state</td></tr>
+            <tr><td><strong>The pre-check is cosmetic</strong></td>
+                <td>The unique index resolves races. The Java check only produces a friendlier message</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>Clock</strong> is injected rather than read from <code>Instant.now()</code> so tests can
+        control time — and so every replica shares the database's timeline (§10).</p>
+    </section>
+
+    <section id="s6">
+      <h2 class="sec"><span class="n">06</span> Payment — <code>payment</code>, <code>reservation.service</code></h2>
+
+      <div class="block">
+        <header><span class="name">PaymentGateway</span><span class="role">interface — the provider seam</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd><code>charge</code> · <code>lookup</code> · <code>refund</code></dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">nothing — implementations bring their own</dd></div>
+          <div class="row"><dt>Watch</dt><dd>Two known gaps before a real provider: no currency parameter, and <code>refund</code> returns <code>void</code> so a failed or asynchronous refund cannot be represented.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">FakePaymentGateway</span><span class="role">development stand-in</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Always approves; keeps an in-memory ledger so lookups work</dd></div>
+          <div class="row"><dt>Watch</dt><dd>The ledger is <strong>per instance</strong>, so multi-instance reconciliation cannot be tested with it. It also never declines, which hides retry bugs.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">PaymentService</span><span class="role">orchestrates the three steps</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>begin → charge → record reference → apply outcome</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">ReservationService · PaymentGateway</dd></div>
+          <div class="row"><dt>Watch</dt><dd><strong>Must stay a separate bean.</strong> It calls <code>ReservationService</code> across a bean boundary, which is what makes those <code>@Transactional</code> steps real transactions. Inlining it into <code>ReservationService</code> would collapse them into one via self-invocation and hold a transaction open across the network call.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="note crit">
+        <span class="lbl">The throw is the mechanism</span>
+        <p>When a charge succeeds but the hold has lapsed, <code>applyPaymentResult</code> throws on
+          purpose. The rollback preserves the <code>INITIATED</code> row so reconciliation can refund.
+          "Handling it gracefully" instead would mark the payment resolved and strand a real charge.</p>
+      </div>
+
+      <p>Supporting records: <code>PaymentContext</code> (snapshot passed out of transaction one),
+        <code>PaymentResult</code>, <code>PaymentSummary</code>, <code>ReconcileOutcome</code>,
+        <code>PaymentReviewItem</code>. All immutable, none touch the database.</p>
+    </section>
+
+    <section id="s7">
+      <h2 class="sec"><span class="n">07</span> Background jobs</h2>
+
+      <div class="block">
+        <header><span class="name">HoldSweeper</span><span class="role">returns abandoned seats to sale</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Releases expired holds in batches of 200, up to 20 batches per tick</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">ReservationService · SchedulerLease · ReservationProperties · <strong>Redis</strong> (lease)</dd></div>
+          <div class="row"><dt>Watch</dt><dd>It is a <em>safety net</em>, not the mechanism. Booking-time lazy release handles busy events. If this job stopped, the system stays correct.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">PaymentReconciliationJob</span><span class="role">resolves in-doubt payments</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Asks the provider what happened, then confirms, fails, or refunds; records failures with backoff and dead-letters after 6</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">ReservationService · PaymentGateway · SchedulerLease · ReservationProperties</dd></div>
+          <div class="row"><dt>Watch</dt><dd>Provider calls happen <em>outside</em> the transaction, which is why <code>reconcile</code> returns a refund <em>instruction</em> rather than performing it. Refunds are claimed in the database first, so overlapping runs cannot refund twice.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">SchedulerLease</span><span class="role">one instance per tick</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd><code>SET key owner NX PX ttl</code> — atomic in Redis</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">StringRedisTemplate</dd></div>
+          <div class="row"><dt>Watch</dt><dd>Never renewed or released early — it simply expires, so a dead worker blocks a job for at most one interval. <strong>Fails open</strong>; it is an optimisation, and the database claim is the real guarantee.</dd></div>
+        </dl></div>
+      </div>
+    </section>
+
+    <section id="s8">
+      <h2 class="sec"><span class="n">08</span> Catalog — <code>catalog.service</code></h2>
+
+      <div class="block">
+        <header><span class="name">HallService</span><span class="role">venue layout</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Creates halls; reconciles the full set of seats, sections and layout objects; assigns seats to sections geometrically</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">HallRepository · BookingSeatRepository · BookingRepository · EventPricingRepository · ObjectMapper</dd></div>
+          <div class="row"><dt>Watch</dt><dd>It depends on <em>reservation</em> repositories on purpose: it must refuse to delete seats or sections that have bookings. Deleting a section cascades to its price lines but is blocked when sold.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">EventService</span><span class="role">shows and prices</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Does</dt><dd>Creates events, sets per-section prices, controls publication</dd></div>
+          <div class="row"><dt>Needs</dt><dd class="deps">EventRepository · OrganizerService · HallService</dd></div>
+          <div class="row"><dt>Watch</dt><dd>Publishing requires a price for <strong>every</strong> section — there is no venue-level fallback, by design.</dd></div>
+        </dl></div>
+      </div>
+
+      <div class="block">
+        <header><span class="name">LayoutPresetService · OrganizerService</span><span class="role">reusable layouts · promoters</span></header>
+        <div class="body"><dl>
+          <div class="row"><dt>Needs</dt><dd class="deps">their repository (LayoutPresetService also ObjectMapper)</dd></div>
+          <div class="row"><dt>Watch</dt><dd>Preset members are stored as one JSON document with bounding-box-relative coordinates — that is what makes a preset stampable into any hall. Names are unique; a clash returns 409.</dd></div>
+        </dl></div>
+      </div>
+    </section>
+
+    <section id="s9">
+      <h2 class="sec"><span class="n">09</span> Geometry — <code>catalog.service</code></h2>
+      <p>Two stateless utilities. Both are pure functions: no Spring, no database, trivially testable.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Class</th><th>Does</th><th>Needs</th><th>Watch</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">SectionGeometry</td><td>Serialises boundary polygons; ray-cast point-in-polygon</td><td>ObjectMapper passed in</td>
+                <td><code>contains</code> decides which section owns a seat. It handles concave shapes; the admin editor's client-side copy must stay identical</td></tr>
+            <tr><td class="mono">ShapePoints</td><td>Generates presets: rectangle, circle, triangle, pentagon, hexagon, curve</td><td>nothing</td>
+                <td>Mirrored in the admin JavaScript. Change one, change both, or shapes drift between preview and saved result</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s10">
+      <h2 class="sec"><span class="n">10</span> Infrastructure — <code>common.config</code></h2>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Class</th><th>Does</th><th>Needs</th><th>Watch</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">CacheConfig</td><td>Redis caches with jittered TTL and a fail-open error handler</td><td>ReservationProperties · ObjectMapper · Redis</td>
+                <td>Each cache is bound to one response type. Change a DTO and old cached JSON may fail to deserialise — bump the cache name or accept errors during rollout</td></tr>
+            <tr><td class="mono">ClockConfig</td><td>Publishes the <code>Clock</code> bean</td><td>JdbcTemplate</td>
+                <td>Supplies <code>DatabaseAlignedClock</code>, so every replica shares the database's timeline</td></tr>
+            <tr><td class="mono">DatabaseAlignedClock</td><td>Samples database time each minute; applies the offset locally</td><td>JdbcTemplate</td>
+                <td>Keeps the hot path free of a round trip. Ignores offsets over 5 minutes as noise and warns to check NTP</td></tr>
+            <tr><td class="mono">WebMvcConfig</td><td>Registers the <code>@CurrentCustomer</code> resolver</td><td>CurrentCustomerArgumentResolver</td>
+                <td>Remove it and identity injection silently yields null</td></tr>
+            <tr><td class="mono">WebConfig</td><td>CORS</td><td>nothing</td>
+                <td>Currently <code>*</code> — must be restricted before production</td></tr>
+            <tr><td class="mono">ReservationProperties</td><td>Binds <code>app.reservation.*</code></td><td>config values</td>
+                <td>A record: every property must exist in config or startup fails</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s11">
+      <h2 class="sec"><span class="n">11</span> Errors — <code>common.exception</code></h2>
+      <p>Throw the exception that carries the right status; the handler does the rest. Never build an
+        error response in a controller.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Exception</th><th>Status</th><th>Throw when</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">BusinessRuleException</td><td>400</td><td>The request is valid but the rules forbid it</td></tr>
+            <tr><td class="mono">UnauthorizedException</td><td>401</td><td>No usable credential</td></tr>
+            <tr><td class="mono">ResourceNotFoundException</td><td>404</td><td>Missing — <em>or not the caller's</em>, so ids can't be probed</td></tr>
+            <tr><td class="mono">ConflictException</td><td>409</td><td>Someone else won, or work is already in flight</td></tr>
+            <tr><td class="mono">TooManyRequestsException</td><td>429</td><td>Throttled; carries <code>Retry-After</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>GlobalExceptionHandler</code> maps all of these to the shared <code>ApiError</code> shape
+        and is the only place that sets response status for errors.</p>
+    </section>
+
+    <section id="s12">
+      <h2 class="sec"><span class="n">12</span> Configuration keys</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Key</th><th>Default</th><th>Read by</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">hold-duration</td><td class="mono">PT10M</td><td>ReservationService</td><td>How long a seat stays held unpaid</td></tr>
+            <tr><td class="mono">max-seats-per-booking</td><td class="mono">10</td><td>ReservationService</td><td>Backs up the DTO cap</td></tr>
+            <tr><td class="mono">sweep-interval</td><td class="mono">PT30S</td><td>both jobs</td><td>Tick rate, and the lease TTL</td></tr>
+            <tr><td class="mono">cache-ttl</td><td class="mono">PT2S</td><td>CacheConfig</td><td>Base lifetime, jittered ±20%</td></tr>
+            <tr><td class="mono">reconcile-after</td><td class="mono">PT1M</td><td>ReservationService</td><td>Grace before a payment is treated as in doubt</td></tr>
+            <tr><td class="mono">unpaid-hold-limit</td><td class="mono">5</td><td>UnpaidHoldThrottle</td><td>Unpaid holds allowed per window</td></tr>
+            <tr><td class="mono">unpaid-hold-window</td><td class="mono">PT10M</td><td>UnpaidHoldThrottle</td><td>Window for the above</td></tr>
+            <tr><td class="mono">dev-tokens-enabled</td><td class="mono">true</td><td>DevTokenController</td><td><strong>Set false in production</strong></td></tr>
+            <tr><td class="mono">seed-demo-data</td><td class="mono">true</td><td>DemoDataSeeder</td><td><strong>Set false in production</strong></td></tr>
+            <tr><td class="mono">DB_POOL_SIZE</td><td class="mono">20</td><td>Hikari</td><td>Per instance — multiply by replicas</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s13">
+      <h2 class="sec"><span class="n">13</span> Dependency rules</h2>
+      <p>Four rules keep the structure from eroding. Each has a concrete failure behind it.</p>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Rule</th><th>Because</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Controllers hold no business logic</strong></td>
+                <td>Rules would then differ per entry point, and background jobs bypass controllers entirely</td></tr>
+            <tr><td><strong>Services never call other services' repositories</strong></td>
+                <td>Ownership of a table stays with one service, so its invariants are enforced in one place</td></tr>
+            <tr><td><strong>Never call a network service inside a transaction</strong></td>
+                <td>Connections are finite; a slow provider becomes a total outage</td></tr>
+            <tr><td><strong>Correctness rules go in the schema, not the service</strong></td>
+                <td>Application checks cannot survive concurrency; database constraints can</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note good">
+        <span class="lbl">Before changing a block</span>
+        <p>Check its <em>Watch</em> row first. Most of them record a failure that has already happened
+          once — the flush ordering, the seat sorting, the payment bean boundary, and the schema
+          guard were all written after something broke.</p>
+      </div>
+    </section>
+
+    </main>
+  </div>
+</div>
+</div>

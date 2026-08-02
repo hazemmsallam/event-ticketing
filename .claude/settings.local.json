@@ -32,7 +32,14 @@
       "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot -N -e ' *)",
       "Bash('C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe' -uroot -proot -e 'DROP DATABASE IF EXISTS event_ticketing; CREATE DATABASE event_ticketing;')",
       "Bash(sed -n '/CREATE TABLE hall/,/ENGINE/p' src/main/resources/db/migration/V1__catalog_schema.sql)",
-      "Bash(sed -n '/CREATE TABLE event \\(/,/ENGINE/p' src/main/resources/db/migration/V1__catalog_schema.sql)"
+      "Bash(sed -n '/CREATE TABLE event \\(/,/ENGINE/p' src/main/resources/db/migration/V1__catalog_schema.sql)",
+      "Bash(cd \"C:/Users/GIGABYTE/Desktop/ticketing_mobile\" 2>/dev/null && ls -a && echo \"=== markers ===\" && ls pubspec.yaml package.json build.gradle app/build.gradle Podfile 2>/dev/null || echo \"PATH NOT FOUND\")",
+      "Bash(flutter analyze *)",
+      "Bash(flutter test *)",
+      "Bash(sed -n '/public int releaseExpired\\(\\)/,/^    }/p' src/main/java/com/eventticketing/reservation/service/ReservationService.java)",
+      "Bash(sed -n '/private Map<Long, SeatAvailabilityStatus> resolveActiveSeatStatuses/,/^    }/p' src/main/java/com/eventticketing/reservation/service/ReservationService.java)",
+      "Bash(sed -n '/public ReconcileOutcome reconcile/,/^    }/p' src/main/java/com/eventticketing/reservation/service/ReservationService.java)",
+      "Bash(sed -n '/public void reconcile\\(\\)/,/^    }/p' src/main/java/com/eventticketing/reservation/service/PaymentReconciliationJob.java)"
     ]
   }
 }
