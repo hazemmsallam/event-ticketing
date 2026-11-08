@@ -24,3 +24,7 @@ bin/
 
 ### Logs ###
 *.log
+
+### Uploaded media (local dev only; served at /uploads/**) ###
+/uploads/
+

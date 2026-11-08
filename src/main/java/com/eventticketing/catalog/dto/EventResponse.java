@@ -4,7 +4,9 @@ import com.eventticketing.catalog.domain.Event;
 import com.eventticketing.catalog.domain.EventStatus;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Full event detail including hall summary, organizer and pricing.
@@ -14,6 +16,10 @@ public record EventResponse(
         String name,
         String description,
         String category,
+        String imageUrl,
+        String tagline,
+        boolean featured,
+        Set<String> tags,
         Instant startAt,
         Instant endAt,
         EventStatus status,
@@ -28,6 +34,10 @@ public record EventResponse(
                 e.getName(),
                 e.getDescription(),
                 e.getCategory(),
+                e.getImageUrl(),
+                e.getTagline(),
+                e.isFeatured(),
+                e.getTags() == null ? new LinkedHashSet<>() : new LinkedHashSet<>(e.getTags()),
                 e.getStartAt(),
                 e.getEndAt(),
                 e.getStatus(),

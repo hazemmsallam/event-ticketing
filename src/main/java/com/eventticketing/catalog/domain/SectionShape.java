@@ -13,6 +13,12 @@ public enum SectionShape {
     CIRCLE,
     ELLIPSE,
     TRIANGLE,
+    /** Isoceles trapezoid, narrow edge at the top (stage side), wide edge at the bottom. */
+    TRAPEZOID,
+    /** Arena left-wing block: right edge vertical (flush against the centre section), left edge slanting outward going down. */
+    TRAPEZOID_LEFT,
+    /** Arena right-wing block: left edge vertical (flush against the centre section), right edge slanting outward going down. */
+    TRAPEZOID_RIGHT,
     PENTAGON,
     HEXAGON,
     /** A curved band (half-ring / crescent), e.g. a balcony sweep wrapping a stage. */

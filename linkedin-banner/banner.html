@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@500&display=swap');
+  html, body { margin: 0; padding: 0; }
+  body { width: 1584px; height: 396px; overflow: hidden; }
+  .banner {
+    position: relative; width: 1584px; height: 396px; overflow: hidden;
+    background: radial-gradient(ellipse at 85% 20%, #1d3a6b 0%, transparent 55%),
+                linear-gradient(120deg, #0a1020 0%, #0f1b33 55%, #13284a 100%);
+    font-family: 'Inter', system-ui, sans-serif; color: #e8eefc;
+  }
+  svg.net { position: absolute; inset: 0; }
+  .content {
+    position: absolute; left: 560px; right: 80px; top: 70px;
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 18px; letter-spacing: 3px;
+    color: #ff7a1a; text-transform: uppercase; margin-bottom: 14px;
+  }
+  h1 { margin: 0; font-size: 50px; font-weight: 800; letter-spacing: -1px; line-height: 1.1; }
+  h1 span { color: #7fb2ff; }
+  .sub { margin-top: 14px; font-size: 22px; color: #a9b8d6; font-weight: 500; }
+  .chips { margin-top: 26px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .chip {
+    font-family: 'JetBrains Mono', monospace; font-size: 16px; padding: 7px 14px;
+    border: 1px solid #2c4777; border-radius: 999px; background: rgba(127,178,255,0.08); color: #cfe0ff;
+  }
+  .chip.hot { border-color: #ff7a1a; color: #ffb27a; background: rgba(255,122,26,0.10); }
+</style>
+</head>
+<body>
+<div class="banner">
+  <svg class="net" width="1584" height="396" viewBox="0 0 1584 396">
+    <g stroke="#2a4a80" stroke-width="1.2" opacity="0.55" fill="none">
+      <path d="M40 60 L180 120 L320 70 L430 150 M180 120 L150 250 L300 300 M320 70 L300 300 M430 150 L470 280"/>
+      <path d="M1380 40 L1480 110 L1560 60 M1480 110 L1450 230 L1550 300 M1450 230 L1340 330"/>
+    </g>
+    <g fill="#4f86d9" opacity="0.8">
+      <circle cx="40" cy="60" r="4"/><circle cx="180" cy="120" r="5"/><circle cx="320" cy="70" r="4"/>
+      <circle cx="430" cy="150" r="5"/><circle cx="150" cy="250" r="4"/><circle cx="300" cy="300" r="5"/>
+      <circle cx="470" cy="280" r="4"/>
+      <circle cx="1380" cy="40" r="4"/><circle cx="1480" cy="110" r="5"/><circle cx="1560" cy="60" r="4"/>
+      <circle cx="1450" cy="230" r="5"/><circle cx="1550" cy="300" r="4"/><circle cx="1340" cy="330" r="4"/>
+    </g>
+    <g fill="#ff7a1a"><circle cx="430" cy="150" r="3"/><circle cx="1480" cy="110" r="3"/></g>
+  </svg>
+  <div class="content">
+    <div class="eyebrow">Backend · Integration · Architecture</div>
+    <h1>Building <span>telecom-scale</span> systems<br>that don't break under load.</h1>
+    <div class="sub">9+ years · Samsung → MBC → Orange Jordan</div>
+    <div class="chips">
+      <div class="chip">Java</div>
+      <div class="chip">Spring Boot</div>
+      <div class="chip">Microservices</div>
+      <div class="chip">Kubernetes</div>
+      <div class="chip">Redis</div>
+      <div class="chip hot">200K-player real-time PvP</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

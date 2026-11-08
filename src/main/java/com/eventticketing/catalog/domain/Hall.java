@@ -29,7 +29,7 @@ public class Hall extends BaseEntity {
     @Column(name = "address")
     private String address;
 
-    /** Total number of seats (seated halls) or standing capacity (non-seated halls). */
+    /** Every seat plus the capacity of every general-admission section. */
     @Column(name = "capacity", nullable = false)
     private int capacity;
 

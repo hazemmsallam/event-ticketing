@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,20 +49,16 @@ public class EventService {
         Organizer organizer = organizerService.getEntity(request.organizerId());
         Hall hall = hallService.getEntity(request.hallId());
 
-        if (request.maxCapacity() > hall.getCapacity()) {
-            throw new BusinessRuleException(
-                    "maxCapacity %d exceeds hall capacity %d.".formatted(request.maxCapacity(), hall.getCapacity()));
-        }
-
         Event event = new Event();
         event.setName(request.name());
         event.setDescription(request.description());
         event.setCategory(request.category());
+        applyContentFields(event, request);
         event.setStartAt(request.startAt());
         event.setEndAt(request.endAt());
         event.setOrganizer(organizer);
         event.setHall(hall);
-        event.setMaxCapacity(request.maxCapacity());
+        syncCapacityFromHall(event);
         event.setStatus(EventStatus.DRAFT);
 
         return toResponse(eventRepository.save(event));
@@ -80,23 +77,19 @@ public class EventService {
         if (changingHall && event.getStatus() != EventStatus.DRAFT) {
             throw new BusinessRuleException("The hall can only be changed while the event is in DRAFT.");
         }
-        if (request.maxCapacity() > hall.getCapacity()) {
-            throw new BusinessRuleException(
-                    "maxCapacity %d exceeds hall capacity %d.".formatted(request.maxCapacity(), hall.getCapacity()));
-        }
-
         event.setName(request.name());
         event.setDescription(request.description());
         event.setCategory(request.category());
+        applyContentFields(event, request);
         event.setStartAt(request.startAt());
         event.setEndAt(request.endAt());
         event.setOrganizer(organizer);
-        event.setMaxCapacity(request.maxCapacity());
         if (changingHall) {
             // Sections differ in the new hall, so previously configured pricing no longer applies.
             event.setHall(hall);
             event.clearPricing();
         }
+        syncCapacityFromHall(event);
         return toResponse(event);
     }
 
@@ -146,9 +139,45 @@ public class EventService {
         }
         if (target == EventStatus.PUBLISHED) {
             requirePricingComplete(event);
+            // The hall layout may have changed since the event was created.
+            syncCapacityFromHall(event);
         }
         event.setStatus(target);
         return toResponse(event);
+    }
+
+    /**
+     * An event can sell exactly what its hall holds: every seat plus each general-admission
+     * section's capacity. Bookings enforce this through per-seat and per-section checks; the stored
+     * value is kept in step for display.
+     */
+    private void syncCapacityFromHall(Event event) {
+        event.setMaxCapacity(event.getHall().getCapacity());
+    }
+
+    /** Poster, tagline, featured flag and the tag set, all optional on write. */
+    private void applyContentFields(Event event, CreateEventRequest request) {
+        event.setImageUrl(trimToNull(request.imageUrl()));
+        event.setTagline(trimToNull(request.tagline()));
+        event.setFeatured(Boolean.TRUE.equals(request.featured()));
+
+        Set<String> tags = new LinkedHashSet<>();
+        if (request.tags() != null) {
+            for (String raw : request.tags()) {
+                String tag = trimToNull(raw);
+                if (tag != null) {
+                    tags.add(tag);
+                }
+            }
+        }
+        event.getTags().clear();
+        event.getTags().addAll(tags);
+    }
+
+    private static String trimToNull(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
     }
 
     private void requirePricingComplete(Event event) {

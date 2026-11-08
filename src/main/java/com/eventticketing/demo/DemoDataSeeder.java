@@ -65,6 +65,7 @@ public class DemoDataSeeder implements CommandLineRunner {
 
         Long concertId = eventService.create(new CreateEventRequest(
                 "Symphony Under the Stars", "An evening of orchestral classics.", "Music",
+                null, "AN EVENING UNDER OPEN SKIES", true, java.util.Set.of("classical", "orchestra"),
                 base, base.plus(3, ChronoUnit.HOURS),
                 organizerId, grandTheatre.id(), grandTheatre.capacity())).id();
         eventService.setPricing(concertId, new SetEventPricingRequest(List.of(
@@ -74,6 +75,7 @@ public class DemoDataSeeder implements CommandLineRunner {
 
         Long festivalId = eventService.create(new CreateEventRequest(
                 "Summer Food Festival", "Open-air general admission festival.", "Festival",
+                null, "FOOD · MUSIC · NIGHT MARKET", false, java.util.Set.of("outdoor", "family"),
                 base.plus(1, ChronoUnit.DAYS), base.plus(1, ChronoUnit.DAYS).plus(8, ChronoUnit.HOURS),
                 organizerId, openArena.id(), 300)).id();
         eventService.setPricing(festivalId, new SetEventPricingRequest(List.of(

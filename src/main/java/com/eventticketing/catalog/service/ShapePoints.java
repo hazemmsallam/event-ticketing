@@ -54,6 +54,32 @@ public final class ShapePoints {
                     new PointItem(cx, y),
                     new PointItem(x + width, y + height),
                     new PointItem(x, y + height));
+            case TRAPEZOID -> {
+                double inset = width * 0.2; // narrow top edge = 60% of box width
+                yield List.of(
+                        new PointItem(x + inset, y),
+                        new PointItem(x + width - inset, y),
+                        new PointItem(x + width, y + height),
+                        new PointItem(x, y + height));
+            }
+            case TRAPEZOID_LEFT -> {
+                // Right edge vertical (meets the centre block); left side slants outward going down.
+                double topInset = width * 0.3;
+                yield List.of(
+                        new PointItem(x + topInset, y),
+                        new PointItem(x + width, y),
+                        new PointItem(x + width, y + height),
+                        new PointItem(x, y + height));
+            }
+            case TRAPEZOID_RIGHT -> {
+                // Left edge vertical (meets the centre block); right side slants outward going down.
+                double topInset = width * 0.3;
+                yield List.of(
+                        new PointItem(x, y),
+                        new PointItem(x + width - topInset, y),
+                        new PointItem(x + width, y + height),
+                        new PointItem(x, y + height));
+            }
             case PENTAGON -> regularPolygon(cx, cy, width / 2.0, height / 2.0, 5);
             case HEXAGON -> regularPolygon(cx, cy, width / 2.0, height / 2.0, 6);
             case CIRCLE, ELLIPSE -> ellipse(cx, cy, width / 2.0, height / 2.0);

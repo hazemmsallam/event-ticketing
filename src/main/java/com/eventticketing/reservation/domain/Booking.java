@@ -1,7 +1,6 @@
 package com.eventticketing.reservation.domain;
 
 import com.eventticketing.catalog.domain.Event;
-import com.eventticketing.catalog.domain.Section;
 import com.eventticketing.common.domain.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -23,8 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A booking (order). For a seated event it owns one {@link BookingSeat} per selected seat;
- * for a non-seated (general admission) event it simply carries a {@code quantity}.
+ * One order: any mix of selected seats ({@link BookingSeat}) and general-admission tickets in one
+ * or more sections ({@link BookingGaLine}), paid for together.
  */
 @Entity
 @Table(name = "booking")
@@ -45,15 +44,7 @@ public class Booking extends BaseEntity {
     @Column(name = "status", nullable = false, length = 20)
     private BookingStatus status;
 
-    /**
-     * For a general-admission booking, the section its tickets belong to (drives per-section
-     * capacity). Null for a seated booking, whose seats carry their own sections.
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "section_id")
-    private Section section;
-
-    /** Number of seats (seated) or admission tickets (general admission). */
+    /** Combined number of held seats and general-admission tickets. */
     @Column(name = "quantity", nullable = false)
     private int quantity;
 
@@ -72,7 +63,10 @@ public class Booking extends BaseEntity {
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BookingSeat> bookingSeats = new ArrayList<>();
 
-    /** Tickets generated once payment confirms the booking (one per seat / per GA quantity). */
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<BookingGaLine> gaLines = new ArrayList<>();
+
+    /** Tickets generated once payment confirms the booking (one per seat and per GA ticket). */
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Ticket> tickets = new ArrayList<>();
 
@@ -81,12 +75,25 @@ public class Booking extends BaseEntity {
         this.bookingSeats.add(seat);
     }
 
+    public void addGaLine(BookingGaLine line) {
+        line.setBooking(this);
+        this.gaLines.add(line);
+    }
+
     public void addTicket(Ticket ticket) {
         ticket.setBooking(this);
         this.tickets.add(ticket);
     }
 
+    public List<BookingSeat> heldSeats() {
+        return bookingSeats.stream().filter(bs -> bs.getStatus() == BookingSeatStatus.HELD).toList();
+    }
+
+    public int generalAdmissionQuantity() {
+        return gaLines.stream().mapToInt(BookingGaLine::getQuantity).sum();
+    }
+
     public boolean isExpired(Instant now) {
-        return expiresAt != null && expiresAt.isBefore(now);
+        return expiresAt != null && !expiresAt.isAfter(now);
     }
 }

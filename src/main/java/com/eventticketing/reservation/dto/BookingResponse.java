@@ -21,15 +21,17 @@ public record BookingResponse(
         Instant expiresAt,
         Instant confirmedAt,
         String paymentRef,
-        Long sectionId,
-        String sectionName,
         List<BookingSeatResponse> seats,
+        List<GeneralAdmissionResponse> generalAdmission,
         List<TicketResponse> tickets
 ) {
     public static BookingResponse from(Booking b) {
         List<BookingSeatResponse> seats = b.getBookingSeats().stream()
                 .filter(bs -> bs.getStatus() != BookingSeatStatus.RELEASED)
                 .map(BookingSeatResponse::from)
+                .toList();
+        List<GeneralAdmissionResponse> generalAdmission = b.getGaLines().stream()
+                .map(GeneralAdmissionResponse::from)
                 .toList();
         List<TicketResponse> tickets = b.getTickets().stream()
                 .map(TicketResponse::from)
@@ -47,9 +49,8 @@ public record BookingResponse(
                 b.getExpiresAt(),
                 b.getConfirmedAt(),
                 b.getPaymentRef(),
-                b.getSection() != null ? b.getSection().getId() : null,
-                b.getSection() != null ? b.getSection().getName() : null,
                 seats,
+                generalAdmission,
                 tickets
         );
     }

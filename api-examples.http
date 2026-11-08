@@ -86,11 +86,25 @@ Content-Type: application/json
 
 { "eventId": 1, "customerRef": "user-42", "seatIds": [1, 2] }
 
-### Reserve general-admission tickets (non-seated)
+### Reserve general-admission tickets. Use GA section ids from the seat map.
 POST {{host}}/api/bookings
 Content-Type: application/json
 
-{ "eventId": 2, "customerRef": "user-42", "quantity": 2 }
+{ "eventId": 2, "customerRef": "user-42", "generalAdmission": [{ "sectionId": 3, "quantity": 2 }] }
+
+### Reserve seats and GA tickets from several sections in one order (max 10 tickets in total)
+POST {{host}}/api/bookings
+Content-Type: application/json
+
+{
+  "eventId": 1,
+  "customerRef": "user-42",
+  "seatIds": [1, 2],
+  "generalAdmission": [
+    { "sectionId": 4, "quantity": 3 },
+    { "sectionId": 5, "quantity": 1 }
+  ]
+}
 
 ### Get a booking (check status / expiry).
 ### Booking-scoped calls require X-Customer-Ref = the customerRef that owns the booking;
@@ -98,7 +112,15 @@ Content-Type: application/json
 GET {{host}}/api/bookings/1
 X-Customer-Ref: user-42
 
-### Change the seats on an unpaid hold (atomic swap; resets the hold timer)
+### Replace the whole selection of an unpaid hold (keeps the hold deadline).
+### Omitting generalAdmission removes every GA ticket; omitting seatIds removes every seat.
+PUT {{host}}/api/bookings/1/items
+Content-Type: application/json
+X-Customer-Ref: user-42
+
+{ "seatIds": [2], "generalAdmission": [{ "sectionId": 4, "quantity": 5 }] }
+
+### Change only the seats on an unpaid hold (GA tickets and the hold deadline are kept)
 PUT {{host}}/api/bookings/1/seats
 Content-Type: application/json
 X-Customer-Ref: user-42

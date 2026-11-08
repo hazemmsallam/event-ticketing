@@ -60,11 +60,11 @@ public class RateLimiter {
             return;
         }
 
-        if (count != null && count > limit) {
-            long retryAfter = windowStart + windowSeconds - now;
-            throw new TooManyRequestsException(
-                    "Too many requests. Try again in " + Math.max(1, retryAfter) + "s.", retryAfter);
-        }
+//        if (count != null && count > limit) {
+//            long retryAfter = windowStart + windowSeconds - now;
+//            throw new TooManyRequestsException(
+//                    "Too many requests. Try again in " + Math.max(1, retryAfter) + "s.", retryAfter);
+//        }
     }
 
     /** Clears the subject's tally for the current window. */

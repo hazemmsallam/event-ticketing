@@ -91,16 +91,23 @@ public class HallService {
 	private void populateSeatedHall(Hall hall, CreateHallRequest request) {
 		Integer rows = request.numRows();
 		Integer cols = request.numColumns();
-		if (rows == null || rows < 1 || cols == null || cols < 1) {
-			throw new BusinessRuleException("A seated hall requires numRows and numColumns of at least 1.");
-		}
 
 		SeatNumberingScheme scheme = request.numberingScheme() != null ? request.numberingScheme()
 				: SeatNumberingScheme.ALPHA_ROW_NUMERIC_SEAT;
+		hall.setNumberingScheme(scheme);
+
+		// Rows/columns are optional. When omitted we create an empty seated hall
+		// with just the default section, and the admin lays sections and seats
+		// out visually in the hall editor.
+		if (rows == null || rows < 1 || cols == null || cols < 1) {
+			hall.setLayoutWidth(defaultLayoutWidth(16));
+			hall.setLayoutHeight(defaultLayoutHeight(10));
+			addDefaultSection(hall, SectionBookingMode.SEATED, null);
+			return;
+		}
 
 		hall.setNumRows(rows);
 		hall.setNumColumns(cols);
-		hall.setNumberingScheme(scheme);
 		hall.setCapacity(rows * cols);
 		hall.setLayoutWidth(defaultLayoutWidth(cols));
 		hall.setLayoutHeight(defaultLayoutHeight(rows));
@@ -261,8 +268,6 @@ public class HallService {
 			seat.setSectionName(normalizeSectionName(item.sectionName()));
 		}
 
-		recomputeGridStats(hall);
-
 		// Reconcile non-bookable layout objects. null = leave them untouched;
 		// a list
 		// (possibly empty) is the full desired set. Objects never affect capacity or
@@ -277,6 +282,7 @@ public class HallService {
 			reconcileSections(hall, request.sections());
 			assignSeatsToSections(hall);
 		}
+		recomputeGridStats(hall);
 
 		// Flush so newly created seats/objects/sections receive their IDs before
 		// mapping to response.
@@ -490,7 +496,14 @@ public class HallService {
 		}
 		hall.setNumRows(rows);
 		hall.setNumColumns(cols);
-		hall.setCapacity(hall.getSeats().size());
+		long generalAdmissionCapacity = hall.getSections().stream()
+				.filter(section -> section.getBookingMode() == SectionBookingMode.GENERAL_ADMISSION)
+				.mapToLong(section -> section.getCapacity() == null ? 0 : section.getCapacity()).sum();
+		long capacity = hall.getSeats().size() + generalAdmissionCapacity;
+		if (capacity > Integer.MAX_VALUE) {
+			throw new BusinessRuleException("Combined hall capacity is too large.");
+		}
+		hall.setCapacity((int) capacity);
 	}
 
 	@Transactional

@@ -4,6 +4,7 @@ import com.eventticketing.common.security.CurrentCustomer;
 import com.eventticketing.common.security.CustomerId;
 import com.eventticketing.common.security.UnpaidHoldThrottle;
 import com.eventticketing.reservation.dto.BookingResponse;
+import com.eventticketing.reservation.dto.ChangeBookingItemsRequest;
 import com.eventticketing.reservation.dto.ChangeSeatsRequest;
 import com.eventticketing.reservation.dto.CreateBookingRequest;
 import com.eventticketing.reservation.dto.PaymentResponse;
@@ -48,7 +49,7 @@ public class BookingController {
     }
 
     /**
-     * Reserve seats (seated) or tickets (general admission); returns the hold and its expiry.
+     * Reserve seats, general-admission tickets, or both in one order; returns the hold and its expiry.
      *
      * <p>Guarded by three independent limits: the payload cap on the request DTO (400), the
      * unpaid-hold throttle (429 with {@code Retry-After}) which only bites customers who open
@@ -73,7 +74,18 @@ public class BookingController {
         return reservationService.getBooking(id, customer.ref());
     }
 
-    /** Change the seats on a still-unpaid hold (atomic swap; resets the hold timer). */
+    /**
+     * Replace the whole selection of a still-unpaid hold: add or remove seats, add or remove GA
+     * sections, or change GA quantities. Atomic; the hold deadline is preserved.
+     */
+    @PutMapping("/{id}/items")
+    public BookingResponse changeItems(@PathVariable Long id,
+                                       @CurrentCustomer CustomerId customer,
+                                       @Valid @RequestBody ChangeBookingItemsRequest request) {
+        return reservationService.changeItems(id, customer.ref(), request.seatIds(), request.generalAdmission());
+    }
+
+    /** Change only the seats on a still-unpaid hold (atomic swap; preserves GA tickets and the hold deadline). */
     @PutMapping("/{id}/seats")
     public BookingResponse changeSeats(@PathVariable Long id,
                                        @CurrentCustomer CustomerId customer,

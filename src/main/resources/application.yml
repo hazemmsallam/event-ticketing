@@ -1,6 +1,12 @@
 spring:
   application:
     name: event-ticketing
+  servlet:
+    multipart:
+      # Admin uploads event posters; keep headroom for high-res JPEGs. UploadController also
+      # enforces a 10 MB per-image cap, so this is the outer bound for a single request.
+      max-file-size: 12MB
+      max-request-size: 15MB
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:event_ticketing}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&createDatabaseIfNotExist=true
     username: ${DB_USERNAME:root}
@@ -48,6 +54,11 @@ spring:
 app:
   # Set to true to load a small predefined catalog on startup (see DemoDataSeeder).
   seed-demo-data: ${SEED_DEMO_DATA:true}
+  uploads:
+    # Where UploadController writes event posters and UploadWebMvcConfig serves them from
+    # at /uploads/**. Default is a sibling of the working directory for local testing;
+    # mount a persistent volume (or point at object storage) for anything beyond localhost.
+    directory: ${UPLOADS_DIR:./uploads}
   security:
     # Exposes POST /api/dev/token, which mints valid identities to anyone who asks.
     # MUST be false in production — it is a stand-in until real authentication lands.

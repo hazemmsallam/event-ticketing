@@ -11,7 +11,6 @@ import com.eventticketing.catalog.dto.LayoutObjectResponse;
 import com.eventticketing.catalog.dto.PointItem;
 import com.eventticketing.catalog.repository.EventRepository;
 import com.eventticketing.catalog.repository.SeatRepository;
-import com.eventticketing.catalog.repository.SectionRepository;
 import com.eventticketing.catalog.service.SectionGeometry;
 import com.eventticketing.common.exception.BusinessRuleException;
 import com.eventticketing.common.exception.ConflictException;
@@ -22,6 +21,7 @@ import com.eventticketing.payment.PaymentResult;
 import com.eventticketing.reservation.config.CacheNames;
 import com.eventticketing.reservation.config.ReservationProperties;
 import com.eventticketing.reservation.domain.Booking;
+import com.eventticketing.reservation.domain.BookingGaLine;
 import com.eventticketing.reservation.domain.BookingSeat;
 import com.eventticketing.reservation.domain.BookingSeatStatus;
 import com.eventticketing.reservation.domain.BookingStatus;
@@ -33,6 +33,7 @@ import com.eventticketing.reservation.dto.BookingResponse;
 import com.eventticketing.reservation.dto.CreateBookingRequest;
 import com.eventticketing.reservation.dto.EventAvailabilityResponse;
 import com.eventticketing.reservation.dto.EventSeatMapResponse;
+import com.eventticketing.reservation.dto.GeneralAdmissionSelection;
 import com.eventticketing.reservation.dto.PaymentResponse;
 import com.eventticketing.reservation.dto.SeatAvailabilityResponse;
 import com.eventticketing.reservation.dto.SectionAvailabilityResponse;
@@ -50,6 +51,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -59,10 +61,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -85,7 +91,6 @@ public class ReservationService {
     private final PaymentRepository paymentRepository;
     private final EventRepository eventRepository;
     private final SeatRepository seatRepository;
-    private final SectionRepository sectionRepository;
     private final TicketRepository ticketRepository;
     private final ReservationProperties properties;
     private final Clock clock;
@@ -98,7 +103,6 @@ public class ReservationService {
                               PaymentRepository paymentRepository,
                               EventRepository eventRepository,
                               SeatRepository seatRepository,
-                              SectionRepository sectionRepository,
                               TicketRepository ticketRepository,
                               ReservationProperties properties,
                               Clock clock,
@@ -110,7 +114,6 @@ public class ReservationService {
         this.paymentRepository = paymentRepository;
         this.eventRepository = eventRepository;
         this.seatRepository = seatRepository;
-        this.sectionRepository = sectionRepository;
         this.ticketRepository = ticketRepository;
         this.properties = properties;
         this.clock = clock;
@@ -121,112 +124,43 @@ public class ReservationService {
 
     // ------------------------------------------------------------------ booking
 
-    @Transactional
+    /**
+     * Holds seats, general-admission tickets, or both in one order. Every item is reserved in this
+     * transaction, or none is.
+     *
+     * <p>The event row lock serialises every capacity decision for the event. Seats are also
+     * guarded by the database unique index, but GA tickets have no identity, so their section
+     * counts are only correct because they run under this lock with READ_COMMITTED (a REPEATABLE
+     * READ snapshot taken before the lock could miss a competing booking that just committed).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingResponse createBooking(CreateBookingRequest request, CustomerId customer) {
+        Event event = eventRepository.findByIdForUpdate(request.eventId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Event", request.eventId()));
         Instant now = clock.instant();
         requireNoActiveHold(customer, now);
-    
-        Event event = eventRepository.findById(request.eventId())
-                .orElseThrow(() -> ResourceNotFoundException.of("Event", request.eventId()));
+        requireOpenForBooking(event);
+        Selection selection = normalizeSelection(request.seatIds(), request.generalAdmission());
 
-        if (event.getStatus() != EventStatus.PUBLISHED) {
-            throw new BusinessRuleException(
-                    "Event is not open for booking (status " + event.getStatus() + ").");
-        }
-
-
-        // Route by the request, not the hall: a hall may mix seated and general-admission sections.
-        if (request.seatIds() != null && !request.seatIds().isEmpty()) {
-            return bookSeats(event, request, customer, now);
-        }
-        if (request.sectionId() != null) {
-            return bookGeneralAdmissionSection(event, request, customer, now);
-        }
-        // Legacy: a non-seated hall without sections books against the event's overall capacity.
-        if (!event.getHall().isSeated()) {
-            return bookGeneralAdmission(event, request, customer, now);
-        }
-        throw new BusinessRuleException(
-                "Provide seatIds (seated) or a sectionId with quantity (general admission).");
-    }
-
-    /**
-     * One live hold per customer. Without this, a single account can hold inventory across every
-     * event at once — the payload cap only limits one request, not how many requests you make.
-     *
-     * <p>Deliberately scoped to the whole account rather than per event: an attacker spreading
-     * holds across events does the same damage as concentrating them.
-     */
-    private void requireNoActiveHold(CustomerId customer, Instant now) {
-        List<Booking> active = bookingRepository.findActiveHolds(customer.ref(), now);
-        if (active.isEmpty()) {
-            return;
-        }
-        Booking held = active.get(0);
-        throw new ConflictException(
-                "You already have seats on hold (booking " + held.getId()
-                        + "). Pay for it or cancel it before starting another.");
-    }
-
-    private BookingResponse bookSeats(Event event, CreateBookingRequest request,
-                                      CustomerId customer, Instant now) {
-        List<Long> requested = request.seatIds();
-        if (requested == null || requested.isEmpty()) {
-            throw new BusinessRuleException("A seated event requires seatIds.");
-        }
-        Set<Long> seatIds = new LinkedHashSet<>(requested);
-        if (seatIds.size() != requested.size()) {
-            throw new BusinessRuleException("Duplicate seat ids in request.");
-        }
-        int max = properties.maxSeatsPerBooking();
-        if (seatIds.size() > max) {
-            throw new BusinessRuleException("You can book at most " + max + " seats per booking.");
-        }
-
-        // Free any seats whose holds have already expired so they become bookable again.
-        // Flush the releases now: Hibernate orders INSERTs before UPDATEs within one flush, so
-        // the release (UPDATE -> active_lock NULL) must reach the DB before the new hold's
-        // INSERT, otherwise the insert would collide with the stale active_lock.
+        // Free expired holds so their seats and GA tickets become available. Flush the releases
+        // now: Hibernate orders INSERTs before UPDATEs within one flush, so the release
+        // (UPDATE -> active_lock NULL) must reach the DB before the new hold's INSERT.
         releaseExpiredForEvent(event.getId(), now);
         bookingRepository.flush();
 
-        List<Seat> seats = sortedById(seatRepository.findAllById(seatIds));
-        if (seats.size() != seatIds.size()) {
-            throw new ResourceNotFoundException("One or more requested seats do not exist.");
-        }
-        Long hallId = event.getHall().getId();
-        for (Seat seat : seats) {
-            if (!seat.getHall().getId().equals(hallId)) {
-                throw new BusinessRuleException(
-                        "Seat " + seat.getLabel() + " does not belong to this event's hall.");
-            }
-        }
+        List<Seat> seats = resolveSeats(event, selection.seatIds());
+        requireSeatsFree(event, selection.seatIds(), null);
+        Map<Long, Section> gaSections = resolveGaSections(event, selection.gaQuantities().keySet());
+        selection.gaQuantities().forEach((sectionId, quantity) ->
+                requireGaCapacity(event, gaSections.get(sectionId), quantity, 0, now));
 
-        // Pre-check for a friendly error; the DB unique index is the real guard against races.
-        List<BookingSeat> alreadyActive =
-                bookingSeatRepository.findForSeats(event.getId(), seatIds, ACTIVE_SEAT_STATUSES);
-        if (!alreadyActive.isEmpty()) {
-            String taken = alreadyActive.stream()
-                    .map(bs -> bs.getSeat().getLabel())
-                    .distinct()
-                    .collect(Collectors.joining(", "));
-            throw new ConflictException("These seats are already reserved or booked: " + taken + ".");
-        }
-
-        Booking booking = newBooking(event, customer, seats.size(), now);
-        BigDecimal total = BigDecimal.ZERO;
+        Booking booking = newBooking(event, customer, selection.total(), now);
         for (Seat seat : seats) {
-            BigDecimal price = seatPrice(event, seat);
-            BookingSeat bookingSeat = new BookingSeat();
-            bookingSeat.setEvent(event);
-            bookingSeat.setSeat(seat);
-            applySectionSnapshot(bookingSeat, seat.getSection());
-            bookingSeat.setPrice(price);
-            bookingSeat.setStatus(BookingSeatStatus.HELD);
-            booking.addBookingSeat(bookingSeat);
-            total = total.add(price);
+            booking.addBookingSeat(newSeatLine(event, seat));
         }
-        booking.setTotalAmount(total);
+        selection.gaQuantities().forEach((sectionId, quantity) ->
+                booking.addGaLine(newGaLine(event, gaSections.get(sectionId), quantity)));
+        recalculateTotals(booking);
 
         try {
             bookingRepository.saveAndFlush(booking);
@@ -239,108 +173,199 @@ public class ReservationService {
         return BookingResponse.from(booking);
     }
 
-    private BookingResponse bookGeneralAdmission(Event event, CreateBookingRequest request,
-                                                 CustomerId customer, Instant now) {
-        Integer quantity = request.quantity();
-        if (quantity == null || quantity < 1) {
-            throw new BusinessRuleException("A non-seated event requires a quantity of at least 1.");
+    /** A syntactically valid selection: distinct seat ids and one quantity per GA section. */
+    private record Selection(Set<Long> seatIds, Map<Long, Integer> gaQuantities) {
+        int total() {
+            return seatIds.size() + gaQuantities.values().stream().mapToInt(Integer::intValue).sum();
         }
-        int max = properties.maxSeatsPerBooking();
-        if (quantity > max) {
-            throw new BusinessRuleException("You can book at most " + max + " tickets per booking.");
-        }
+    }
 
-        // Serialize capacity checks for this event so it cannot be oversold.
-        Event locked = eventRepository.findByIdForUpdate(event.getId())
-                .orElseThrow(() -> ResourceNotFoundException.of("Event", event.getId()));
-
-        releaseExpiredForEvent(locked.getId(), now);
-        bookingRepository.flush();
-
-        long confirmed = bookingRepository.sumConfirmedQuantity(locked.getId());
-        long reserved = bookingRepository.sumReservedQuantity(locked.getId(), now);
-        long available = locked.getMaxCapacity() - (confirmed + reserved);
-        if (quantity > available) {
-            throw new ConflictException("Not enough capacity: only " + Math.max(available, 0) + " left.");
+    private Selection normalizeSelection(List<Long> seatIds, List<GeneralAdmissionSelection> generalAdmission) {
+        List<Long> requestedSeats = seatIds == null ? List.of() : seatIds;
+        Set<Long> seats = new LinkedHashSet<>(requestedSeats);
+        if (seats.contains(null) || seats.size() != requestedSeats.size()) {
+            throw new BusinessRuleException("Seat ids must be non-null and unique.");
         }
 
-        BigDecimal price = generalAdmissionPrice(locked);
-        if (price == null) {
-            throw new BusinessRuleException("No general-admission price configured for this event.");
+        Map<Long, Integer> gaQuantities = new LinkedHashMap<>();
+        long total = seats.size();
+        for (GeneralAdmissionSelection item : generalAdmission == null
+                ? List.<GeneralAdmissionSelection>of() : generalAdmission) {
+            if (item == null || item.sectionId() == null) {
+                throw new BusinessRuleException("Each general-admission selection needs a sectionId.");
+            }
+            if (item.quantity() == null || item.quantity() < 1) {
+                throw new BusinessRuleException("General-admission quantity must be at least 1.");
+            }
+            if (gaQuantities.put(item.sectionId(), item.quantity()) != null) {
+                throw new BusinessRuleException("Each general-admission section may appear only once.");
+            }
+            total += item.quantity();
         }
 
-        Booking booking = newBooking(locked, customer, quantity, now);
-        booking.setTotalAmount(price.multiply(BigDecimal.valueOf(quantity)));
-        bookingRepository.save(booking);
-        evictAfterCommit(locked.getId());
-        return BookingResponse.from(booking);
+        int max = maxTicketsPerBooking();
+        if (total < 1 || total > max) {
+            throw new BusinessRuleException("Select between 1 and " + max
+                    + " tickets in total (seats plus general admission).");
+        }
+        return new Selection(seats, gaQuantities);
+    }
+
+    private int maxTicketsPerBooking() {
+        return Math.min(CreateBookingRequest.MAX_SEATS, properties.maxSeatsPerBooking());
+    }
+
+    private void requireOpenForBooking(Event event) {
+        if (event.getStatus() != EventStatus.PUBLISHED) {
+            throw new BusinessRuleException(
+                    "Event is not open for booking (status " + event.getStatus() + ").");
+        }
+    }
+
+    /** Loads the seats, sorted by id, and checks each is a bookable seat of this event's hall. */
+    private List<Seat> resolveSeats(Event event, Set<Long> seatIds) {
+        if (seatIds.isEmpty()) {
+            return List.of();
+        }
+        List<Seat> seats = sortedById(seatRepository.findAllById(seatIds));
+        if (seats.size() != seatIds.size()) {
+            throw new ResourceNotFoundException("One or more requested seats do not exist.");
+        }
+        for (Seat seat : seats) {
+            if (!seat.getHall().getId().equals(event.getHall().getId())) {
+                throw new BusinessRuleException(
+                        "Seat " + seat.getLabel() + " does not belong to this event's hall.");
+            }
+            if (seat.getSection() == null || seat.getSection().getBookingMode() != SectionBookingMode.SEATED) {
+                throw new BusinessRuleException("Seat " + seat.getLabel() + " must belong to a seated section.");
+            }
+        }
+        return seats;
     }
 
     /**
-     * Books tickets in a general-admission section, enforcing that section's own capacity
-     * (independent of any seated sections in the same hall). Availability =
-     * {@code capacity - confirmed - reserved} for that section.
+     * Pre-check for a friendly error; the DB unique index is the real guard against races.
+     * Seats already held by {@code ownBookingId} (when editing) do not count as taken.
      */
-    private BookingResponse bookGeneralAdmissionSection(Event event, CreateBookingRequest request,
-                                                        CustomerId customer, Instant now) {
-        Integer quantity = request.quantity();
-        if (quantity == null || quantity < 1) {
-            throw new BusinessRuleException("A general-admission booking requires a quantity of at least 1.");
+    private void requireSeatsFree(Event event, Set<Long> seatIds, Long ownBookingId) {
+        if (seatIds.isEmpty()) {
+            return;
         }
-        int max = properties.maxSeatsPerBooking();
-        if (quantity > max) {
-            throw new BusinessRuleException("You can book at most " + max + " tickets per booking.");
+        String taken = bookingSeatRepository.findForSeats(event.getId(), seatIds, ACTIVE_SEAT_STATUSES).stream()
+                .filter(bs -> ownBookingId == null || !ownBookingId.equals(bs.getBooking().getId()))
+                .map(bs -> bs.getSeat().getLabel())
+                .distinct()
+                .collect(Collectors.joining(", "));
+        if (!taken.isEmpty()) {
+            throw new ConflictException("These seats are already reserved or booked: " + taken + ".");
         }
+    }
 
-        Section section = sectionRepository.findById(request.sectionId())
-                .orElseThrow(() -> ResourceNotFoundException.of("Section", request.sectionId()));
-        if (!section.getHall().getId().equals(event.getHall().getId())) {
-            throw new BusinessRuleException("That section does not belong to this event's hall.");
+    /** Resolves GA sections against the event's own hall, so a foreign section id is rejected. */
+    private Map<Long, Section> resolveGaSections(Event event, Set<Long> sectionIds) {
+        Map<Long, Section> hallSections = event.getHall().getSections().stream()
+                .collect(Collectors.toMap(Section::getId, Function.identity()));
+        Map<Long, Section> resolved = new LinkedHashMap<>();
+        for (Long sectionId : sectionIds) {
+            Section section = hallSections.get(sectionId);
+            if (section == null) {
+                throw new BusinessRuleException(
+                        "Section " + sectionId + " does not belong to this event's hall.");
+            }
+            if (section.getBookingMode() != SectionBookingMode.GENERAL_ADMISSION) {
+                throw new BusinessRuleException(
+                        "Section '" + section.getName() + "' is seated; select individual seats instead.");
+            }
+            if (section.getCapacity() == null || section.getCapacity() < 1) {
+                throw new BusinessRuleException(
+                        "Section '" + section.getName() + "' has no configured capacity.");
+            }
+            resolved.put(sectionId, section);
         }
-        if (section.getBookingMode() != SectionBookingMode.GENERAL_ADMISSION) {
-            throw new BusinessRuleException(
-                    "Section '" + section.getName() + "' is seated; pick individual seats instead.");
-        }
-        if (section.getCapacity() == null) {
-            throw new BusinessRuleException("Section '" + section.getName() + "' has no configured capacity.");
-        }
+        return resolved;
+    }
 
-        // --- Outside the lock -------------------------------------------------------------
-        // Everything that does not have to be consistent with the capacity check is done first.
-        // Under a flash sale the section lock is the throughput ceiling — one sale at a time —
-        // so every statement moved out of the critical section is throughput bought back.
-        // Reclaiming expired holds touches other bookings, not this section's counters, and
-        // pricing is read-only reference data; neither needs to be serialised.
-        releaseExpiredForEvent(event.getId(), now);
-        bookingRepository.flush();
+    /**
+     * Checks that {@code requested} tickets fit in this event's section. {@code heldByThisBooking}
+     * is what the booking being edited already holds there; it is part of the occupied count, so
+     * it is given back before comparing.
+     */
+    private void requireGaCapacity(Event event, Section section, int requested, int heldByThisBooking,
+                                   Instant now) {
+        long occupied = bookingRepository.sumConfirmedQuantityBySection(event.getId(), section.getId())
+                + bookingRepository.sumReservedQuantityBySection(event.getId(), section.getId(), now)
+                - heldByThisBooking;
+        long available = section.getCapacity() - occupied;
+        if (requested > available) {
+            throw new ConflictException("Not enough capacity in '" + section.getName()
+                    + "': only " + Math.max(available, 0) + " left.");
+        }
+    }
 
+    private BookingSeat newSeatLine(Event event, Seat seat) {
+        BookingSeat line = new BookingSeat();
+        line.setEvent(event);
+        line.setSeat(seat);
+        applySectionSnapshot(line, seat.getSection());
+        line.setPrice(seatPrice(event, seat));
+        line.setStatus(BookingSeatStatus.HELD);
+        return line;
+    }
+
+    private BookingGaLine newGaLine(Event event, Section section, int quantity) {
         BigDecimal price = resolveSectionPrice(event, section);
         if (price == null) {
             throw new BusinessRuleException("No price configured for section '" + section.getName() + "'.");
         }
+        BookingGaLine line = new BookingGaLine();
+        line.setEvent(event);
+        line.setSection(section);
+        line.setSectionName(section.getName());
+        line.setCurrency(section.getCurrency());
+        line.setUnitPrice(price);
+        line.setQuantity(quantity);
+        return line;
+    }
 
-        // --- Critical section -------------------------------------------------------------
-        // Capacity has no per-ticket identity, so no constraint can express "sum <= capacity".
-        // The count and the insert must therefore be serialised against each other, and nothing
-        // else belongs between them. Locking the section rather than the event lets other
-        // sections of the same event keep selling in parallel.
-        sectionRepository.findByIdForUpdate(section.getId())
-                .orElseThrow(() -> ResourceNotFoundException.of("Section", section.getId()));
-
-        long confirmed = bookingRepository.sumConfirmedQuantityBySection(section.getId());
-        long reserved = bookingRepository.sumReservedQuantityBySection(section.getId(), now);
-        long available = section.getCapacity() - (confirmed + reserved);
-        if (quantity > available) {
-            throw new ConflictException("Not enough capacity in '" + section.getName()
-                    + "': only " + Math.max(available, 0) + " left.");
+    /** Derives quantity and total from the held seats and GA lines; all must share one currency. */
+    private void recalculateTotals(Booking booking) {
+        Set<String> currencies = new HashSet<>();
+        BigDecimal total = BigDecimal.ZERO;
+        int quantity = 0;
+        for (BookingSeat seat : booking.heldSeats()) {
+            currencies.add(normalizedCurrency(seat.getCurrency()));
+            total = total.add(seat.getPrice());
+            quantity++;
         }
+        for (BookingGaLine line : booking.getGaLines()) {
+            currencies.add(normalizedCurrency(line.getCurrency()));
+            total = total.add(line.lineTotal());
+            quantity += line.getQuantity();
+        }
+        if (currencies.size() > 1) {
+            throw new BusinessRuleException("All tickets in a booking must use the same currency.");
+        }
+        booking.setQuantity(quantity);
+        booking.setTotalAmount(total);
+    }
 
-        Booking booking = newBooking(event, customer, quantity, now);
-        booking.setSection(section);
-        booking.setTotalAmount(price.multiply(BigDecimal.valueOf(quantity)));
-        bookingRepository.save(booking);
-        evictAfterCommit(event.getId());
-        return BookingResponse.from(booking);
+    private String normalizedCurrency(String currency) {
+        return currency == null || currency.isBlank() ? "" : currency.trim().toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * One live hold per customer. Without this, a single account can hold inventory across every
+     * event at once — the payload cap only limits one request, not how many requests you make.
+     *
+     * <p>Deliberately scoped to the whole account rather than per event: an attacker spreading
+     * holds across events does the same damage as concentrating them.
+     */
+    private void requireNoActiveHold(CustomerId customer, Instant now) {
+        List<Booking> active = bookingRepository.findActiveHolds(customer.ref(), now);
+        if (!active.isEmpty()) {
+            throw new ConflictException("You already have seats on hold (booking " + active.get(0).getId()
+                    + "). Pay for it or cancel it before starting another.");
+        }
     }
 
     /**
@@ -371,10 +396,10 @@ public class ReservationService {
      * INITIATED state, then returns a snapshot so the gateway can be charged <em>outside</em> any
      * transaction. Idempotent — a repeated call reuses the existing payment row and its key.
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public PaymentContext beginPayment(Long bookingId, String customerRef) {
+        Booking booking = getOwnedBookingForUpdate(bookingId, customerRef);
         Instant now = clock.instant();
-        Booking booking = getOwnedBooking(bookingId, customerRef);
 
         if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
             throw new BusinessRuleException(
@@ -398,7 +423,7 @@ public class ReservationService {
         // An INITIATED payment is in doubt: the gateway may already hold a charge we never
         // recorded. Re-keying now would orphan it — reconciliation looks the charge up by the key
         // on this row, and the old one would be gone. Make the caller wait for that to settle.
-        if (payment.getStatus() == PaymentStatus.INITIATED && payment.getId() != null) {
+        if (payment.getId() != null && payment.getStatus() != PaymentStatus.FAILED) {
             throw new ConflictException(
                     "A payment for this booking is already being processed. Check back shortly.");
         }
@@ -462,12 +487,15 @@ public class ReservationService {
      * all in one transaction. If the charge succeeded but the hold no longer exists, the payment
      * is left INITIATED and an error is raised so reconciliation issues a refund.
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public PaymentResponse applyPaymentResult(Long paymentId, PaymentResult result) {
+        paymentRepository.findEventId(paymentId).ifPresent(eventId ->
+                eventRepository.findByIdForUpdate(eventId));
         Instant now = clock.instant();
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Payment", paymentId));
-        Booking booking = payment.getBooking();
+        Booking booking = bookingRepository.findByIdForUpdate(payment.getBooking().getId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Booking", payment.getBooking().getId()));
 
         // Idempotent: if already finalized, report the current state.
         if (payment.getStatus() == PaymentStatus.SUCCEEDED) {
@@ -494,6 +522,9 @@ public class ReservationService {
     }
 
     private void confirmPaidBooking(Booking booking, Payment payment, String reference, Instant now) {
+        if (payment.getAmount().compareTo(booking.getTotalAmount()) != 0) {
+            throw new ConflictException("The charged amount does not match the booking total; review is required.");
+        }
         payment.setStatus(PaymentStatus.SUCCEEDED);
         payment.setReference(reference);
         booking.setStatus(BookingStatus.CONFIRMED);
@@ -527,7 +558,7 @@ public class ReservationService {
     }
 
     /**
-     * Generates the admission tickets for a just-confirmed booking: one per booked seat (seated) or
+     * Generates the admission tickets for a just-confirmed booking: one per booked seat plus
      * one per purchased quantity (general admission). Idempotent — a booking that already has
      * tickets is left untouched.
      */
@@ -540,24 +571,22 @@ public class ReservationService {
         List<BookingSeat> booked = booking.getBookingSeats().stream()
                 .filter(bs -> bs.getStatus() == BookingSeatStatus.BOOKED)
                 .toList();
-        if (!booked.isEmpty()) {
-            for (BookingSeat bs : booked) {
+        for (BookingSeat bs : booked) {
+            Ticket ticket = new Ticket();
+            ticket.setEventId(eventId);
+            ticket.setSeatId(bs.getSeat().getId());
+            ticket.setSeatLabel(bs.getSeat().getLabel());
+            ticket.setSectionId(bs.getSectionId());
+            ticket.setSectionName(bs.getSectionName());
+            ticket.setTicketNumber(ticketNumber(booking.getId(), seq++));
+            booking.addTicket(ticket);
+        }
+        for (BookingGaLine line : booking.getGaLines()) {
+            for (int i = 0; i < line.getQuantity(); i++) {
                 Ticket ticket = new Ticket();
                 ticket.setEventId(eventId);
-                ticket.setSeatId(bs.getSeat().getId());
-                ticket.setSeatLabel(bs.getSeat().getLabel());
-                ticket.setSectionId(bs.getSectionId());
-                ticket.setSectionName(bs.getSectionName());
-                ticket.setTicketNumber(ticketNumber(booking.getId(), seq++));
-                booking.addTicket(ticket);
-            }
-        } else {
-            Section section = booking.getSection();
-            for (int i = 0; i < booking.getQuantity(); i++) {
-                Ticket ticket = new Ticket();
-                ticket.setEventId(eventId);
-                ticket.setSectionId(section != null ? section.getId() : null);
-                ticket.setSectionName(section != null ? section.getName() : null);
+                ticket.setSectionId(line.getSection() == null ? null : line.getSection().getId());
+                ticket.setSectionName(line.getSectionName());
                 ticket.setTicketNumber(ticketNumber(booking.getId(), seq++));
                 booking.addTicket(ticket);
             }
@@ -680,8 +709,10 @@ public class ReservationService {
      * charge succeeded and the hold still stands; signals a refund if the charge succeeded but the
      * seats are gone; marks the payment FAILED if no charge ever happened.
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ReconcileOutcome reconcile(Long paymentId, java.util.Optional<PaymentResult> gatewayResult) {
+        paymentRepository.findEventId(paymentId).ifPresent(eventId ->
+                eventRepository.findByIdForUpdate(eventId));
         Instant now = clock.instant();
         Payment payment = paymentRepository.findById(paymentId).orElse(null);
         if (payment == null) {
@@ -704,7 +735,8 @@ public class ReservationService {
         }
 
         String reference = gatewayResult.get().reference();
-        Booking booking = payment.getBooking();
+        Booking booking = bookingRepository.findByIdForUpdate(payment.getBooking().getId())
+                .orElseThrow(() -> ResourceNotFoundException.of("Booking", payment.getBooking().getId()));
         if (booking.getStatus() == BookingStatus.CONFIRMED) {
             payment.setStatus(PaymentStatus.SUCCEEDED);
             payment.setReference(reference);
@@ -738,9 +770,9 @@ public class ReservationService {
 
     // ------------------------------------------------------------------ cancel
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingResponse cancelBooking(Long bookingId, String customerRef) {
-        Booking booking = getOwnedBooking(bookingId, customerRef);
+        Booking booking = getOwnedBookingForUpdate(bookingId, customerRef);
         if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
             throw new BusinessRuleException(
                     "Only a pending booking can be cancelled (status " + booking.getStatus() + ").");
@@ -752,103 +784,94 @@ public class ReservationService {
     }
 
     /**
-     * Swaps the seats held by a pending booking. Seats no longer wanted are released and new ones
-     * are acquired in the same transaction; seats kept in both sets are left untouched. The DB
-     * unique index still guards every acquired seat, so a seat taken in the meantime yields a
-     * conflict and nothing changes. The hold timer is reset.
+     * Replaces the whole selection of a pending booking: seats and GA tickets can be added,
+     * removed, or have their quantity changed, and the result must satisfy the same rules as a new
+     * booking. Unchanged seats and GA lines keep the price they were held at; only newly added
+     * items are priced now. The original hold deadline is preserved, so repeated edits cannot
+     * keep inventory held forever.
      */
-    @Transactional
-    public BookingResponse changeSeats(Long bookingId, String customerRef, List<Long> requestedSeatIds) {
-        Instant now = clock.instant();
-        Booking booking = getOwnedBooking(bookingId, customerRef);
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public BookingResponse changeItems(Long bookingId, String customerRef, List<Long> seatIds,
+                                       List<GeneralAdmissionSelection> generalAdmission) {
+        Booking booking = getOwnedBookingForUpdate(bookingId, customerRef);
+        return replaceItems(booking, seatIds, generalAdmission);
+    }
 
+    /** Replaces only the seats of a pending booking, keeping its GA tickets as they are. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public BookingResponse changeSeats(Long bookingId, String customerRef, List<Long> seatIds) {
+        Booking booking = getOwnedBookingForUpdate(bookingId, customerRef);
+        List<GeneralAdmissionSelection> keep = booking.getGaLines().stream()
+                .filter(line -> line.getSection() != null)
+                .map(line -> new GeneralAdmissionSelection(line.getSection().getId(), line.getQuantity()))
+                .toList();
+        return replaceItems(booking, seatIds, keep);
+    }
+
+    private BookingResponse replaceItems(Booking booking, List<Long> seatIds,
+                                         List<GeneralAdmissionSelection> generalAdmission) {
+        Instant now = clock.instant();
         if (booking.getStatus() != BookingStatus.PENDING_PAYMENT) {
             throw new BusinessRuleException(
-                    "Only a pending booking's seats can be changed (status " + booking.getStatus() + ").");
+                    "Only a pending booking can be changed (status " + booking.getStatus() + ").");
         }
         if (booking.isExpired(now)) {
             throw new BusinessRuleException("The hold has expired. Please start a new booking.");
         }
+        // The charged amount is fixed when payment begins; the order must not change under it.
+        paymentRepository.findByBookingId(booking.getId()).ifPresent(payment -> {
+            if (payment.getStatus() != PaymentStatus.FAILED) {
+                throw new ConflictException("The booking cannot change while a payment is processing or unresolved.");
+            }
+        });
         Event event = booking.getEvent();
-        if (!event.getHall().isSeated()) {
-            throw new BusinessRuleException("This booking is general admission; there are no seats to change.");
-        }
+        requireOpenForBooking(event);
+        Selection selection = normalizeSelection(seatIds, generalAdmission);
 
-        if (requestedSeatIds == null || requestedSeatIds.isEmpty()) {
-            throw new BusinessRuleException("Provide at least one seat.");
-        }
-        Set<Long> requested = new LinkedHashSet<>(requestedSeatIds);
-        if (requested.size() != requestedSeatIds.size()) {
-            throw new BusinessRuleException("Duplicate seat ids in request.");
-        }
-        int max = properties.maxSeatsPerBooking();
-        if (requested.size() > max) {
-            throw new BusinessRuleException("You can hold at most " + max + " seats per booking.");
-        }
-
-        // Free expired holds so wanted seats become available; flush before any new inserts.
         releaseExpiredForEvent(event.getId(), now);
         bookingRepository.flush();
 
-        // Seats currently held by this booking, and the ones being dropped (current - requested).
-        Set<Long> currentSeatIds = new LinkedHashSet<>();
-        for (BookingSeat bs : booking.getBookingSeats()) {
-            if (bs.getStatus() == BookingSeatStatus.HELD) {
-                currentSeatIds.add(bs.getSeat().getId());
-                if (!requested.contains(bs.getSeat().getId())) {
-                    bs.setStatus(BookingSeatStatus.RELEASED);
-                }
-            }
-        }
+        // Validate everything before touching the booking.
+        Map<Long, BookingSeat> heldBySeat = new LinkedHashMap<>();
+        booking.heldSeats().forEach(bs -> heldBySeat.put(bs.getSeat().getId(), bs));
+        Set<Long> seatsToAdd = new LinkedHashSet<>(selection.seatIds());
+        seatsToAdd.removeAll(heldBySeat.keySet());
+        List<Seat> addedSeats = resolveSeats(event, seatsToAdd);
+        requireSeatsFree(event, seatsToAdd, booking.getId());
 
-        Set<Long> toAdd = new LinkedHashSet<>(requested);
-        toAdd.removeAll(currentSeatIds);
-        if (!toAdd.isEmpty()) {
-            List<Seat> seats = sortedById(seatRepository.findAllById(toAdd));
-            if (seats.size() != toAdd.size()) {
-                throw new ResourceNotFoundException("One or more requested seats do not exist.");
+        Map<Long, BookingGaLine> linesBySection = new LinkedHashMap<>();
+        booking.getGaLines().stream()
+                .filter(line -> line.getSection() != null)
+                .forEach(line -> linesBySection.put(line.getSection().getId(), line));
+        Map<Long, Section> gaSections = resolveGaSections(event, selection.gaQuantities().keySet());
+        selection.gaQuantities().forEach((sectionId, quantity) -> {
+            BookingGaLine current = linesBySection.get(sectionId);
+            int held = current == null ? 0 : current.getQuantity();
+            if (quantity > held) {
+                requireGaCapacity(event, gaSections.get(sectionId), quantity, held, now);
             }
-            Long hallId = event.getHall().getId();
-            for (Seat seat : seats) {
-                if (!seat.getHall().getId().equals(hallId)) {
-                    throw new BusinessRuleException(
-                            "Seat " + seat.getLabel() + " does not belong to this event's hall.");
-                }
-            }
-            List<BookingSeat> activeElsewhere =
-                    bookingSeatRepository.findForSeats(event.getId(), toAdd, ACTIVE_SEAT_STATUSES).stream()
-                            .filter(bs -> !bs.getBooking().getId().equals(bookingId))
-                            .toList();
-            if (!activeElsewhere.isEmpty()) {
-                String taken = activeElsewhere.stream()
-                        .map(bs -> bs.getSeat().getLabel())
-                        .distinct()
-                        .collect(Collectors.joining(", "));
-                throw new ConflictException("These seats are already reserved or booked: " + taken + ".");
-            }
-            for (Seat seat : seats) {
-                BigDecimal price = seatPrice(event, seat);
-                BookingSeat bookingSeat = new BookingSeat();
-                bookingSeat.setEvent(event);
-                bookingSeat.setSeat(seat);
-                applySectionSnapshot(bookingSeat, seat.getSection());
-                bookingSeat.setPrice(price);
-                bookingSeat.setStatus(BookingSeatStatus.HELD);
-                booking.addBookingSeat(bookingSeat);
-            }
-        }
+        });
 
-        BigDecimal total = BigDecimal.ZERO;
-        int quantity = 0;
-        for (BookingSeat bs : booking.getBookingSeats()) {
-            if (bs.getStatus() == BookingSeatStatus.HELD) {
-                total = total.add(bs.getPrice());
-                quantity++;
+        // Apply: release dropped seats, hold new ones, and reshape the GA lines.
+        heldBySeat.forEach((seatId, line) -> {
+            if (!selection.seatIds().contains(seatId)) {
+                line.setStatus(BookingSeatStatus.RELEASED);
             }
+        });
+        for (Seat seat : addedSeats) {
+            booking.addBookingSeat(newSeatLine(event, seat));
         }
-        booking.setTotalAmount(total);
-        booking.setQuantity(quantity);
-        booking.setExpiresAt(now.plus(properties.holdDuration()));
+        booking.getGaLines().removeIf(line -> line.getSection() == null
+                || !selection.gaQuantities().containsKey(line.getSection().getId()));
+        selection.gaQuantities().forEach((sectionId, quantity) -> {
+            BookingGaLine current = linesBySection.get(sectionId);
+            if (current != null) {
+                current.setQuantity(quantity);
+            } else {
+                booking.addGaLine(newGaLine(event, gaSections.get(sectionId), quantity));
+            }
+        });
+        recalculateTotals(booking);
 
         try {
             bookingRepository.saveAndFlush(booking);
@@ -976,8 +999,8 @@ public class ReservationService {
         List<PointItem> points = SectionGeometry.fromJson(objectMapper, section.getPoints());
         if (section.getBookingMode() == SectionBookingMode.GENERAL_ADMISSION) {
             int capacity = section.getCapacity() != null ? section.getCapacity() : 0;
-            long confirmed = bookingRepository.sumConfirmedQuantityBySection(section.getId());
-            long held = bookingRepository.sumReservedQuantityBySection(section.getId(), now);
+            long confirmed = bookingRepository.sumConfirmedQuantityBySection(event.getId(), section.getId());
+            long held = bookingRepository.sumReservedQuantityBySection(event.getId(), section.getId(), now);
             long free = Math.max(0, capacity - (confirmed + held));
             return new SectionAvailabilityResponse(section.getId(), section.getName(),
                     section.getBookingMode(), price, section.getCurrency(), capacity, free, held,
@@ -1019,13 +1042,25 @@ public class ReservationService {
         }
         long confirmed = bookingRepository.sumConfirmedQuantity(eventId);
         long reserved = bookingRepository.sumReservedQuantity(eventId, now);
-        long available = Math.max(0, event.getMaxCapacity() - (confirmed + reserved));
-        boolean soldOut = event.getMaxCapacity() - confirmed <= 0;
-        return new EventAvailabilityResponse(eventId, false, event.getMaxCapacity(),
+        int capacity = event.getHall().getCapacity();
+        long available = Math.max(0, capacity - (confirmed + reserved));
+        boolean soldOut = capacity - confirmed <= 0;
+        return new EventAvailabilityResponse(eventId, false, capacity,
                 confirmed, reserved, available, soldOut, generalAdmissionPrice(event));
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** Consistent lock order shared by edits, payment initiation and cancellation. */
+    private Booking getOwnedBookingForUpdate(Long bookingId, String customerRef) {
+        Long eventId = bookingRepository.findEventId(bookingId)
+                .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
+        eventRepository.findByIdForUpdate(eventId)
+                .orElseThrow(() -> ResourceNotFoundException.of("Event", eventId));
+        return bookingRepository.findByIdForUpdate(bookingId)
+                .filter(booking -> booking.getCustomerRef().equals(customerRef))
+                .orElseThrow(() -> ResourceNotFoundException.of("Booking", bookingId));
+    }
 
     private Booking getBookingEntity(Long bookingId) {
         return bookingRepository.findById(bookingId)
@@ -1102,10 +1137,9 @@ public class ReservationService {
         if (event.getStatus() != EventStatus.PUBLISHED) {
             return;
         }
-        long confirmedUnits = event.getHall().isSeated()
-                ? bookingSeatRepository.countByEventIdAndStatus(event.getId(), BookingSeatStatus.BOOKED)
-                : bookingRepository.sumConfirmedQuantity(event.getId());
-        if (confirmedUnits >= event.getMaxCapacity()) {
+        long confirmedUnits = bookingRepository.sumConfirmedQuantity(event.getId());
+        // Event capacity is derived from the hall: its seats plus every GA section's capacity.
+        if (confirmedUnits >= event.getHall().getCapacity()) {
             event.setStatus(EventStatus.SOLD_OUT);
         }
     }
