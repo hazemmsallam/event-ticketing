@@ -2,7 +2,6 @@ package com.eventticketing.web.mobile;
 
 import com.eventticketing.common.security.CurrentCustomer;
 import com.eventticketing.common.security.CustomerId;
-import com.eventticketing.common.security.UnpaidHoldThrottle;
 import com.eventticketing.reservation.dto.BookingResponse;
 import com.eventticketing.reservation.dto.ChangeBookingItemsRequest;
 import com.eventticketing.reservation.dto.ChangeSeatsRequest;
@@ -30,7 +29,7 @@ import java.util.List;
  * <p>Every endpoint identifies the caller from the {@code Authorization} header via
  * {@link CurrentCustomer}. Nothing here trusts an identity from the request body or a custom
  * header, because both are client-controlled and would let an abuser rotate identity to escape
- * the per-user hold quota and rate limit.
+ * the per-user hold quota.
  */
 @RestController
 @RequestMapping("/api/bookings")
@@ -38,27 +37,21 @@ public class BookingController {
 
     private final ReservationService reservationService;
     private final PaymentService paymentService;
-    private final UnpaidHoldThrottle unpaidHoldThrottle;
 
-    public BookingController(ReservationService reservationService,
-                             PaymentService paymentService,
-                             UnpaidHoldThrottle unpaidHoldThrottle) {
+    public BookingController(ReservationService reservationService, PaymentService paymentService) {
         this.reservationService = reservationService;
         this.paymentService = paymentService;
-        this.unpaidHoldThrottle = unpaidHoldThrottle;
     }
 
     /**
      * Reserve seats, general-admission tickets, or both in one order; returns the hold and its expiry.
      *
-     * <p>Guarded by three independent limits: the payload cap on the request DTO (400), the
-     * unpaid-hold throttle (429 with {@code Retry-After}) which only bites customers who open
-     * holds and never pay, and the single-active-hold quota enforced in the service (409).
+     * <p>Guarded by the payload cap on the request DTO (400) and the single-active-hold quota
+     * enforced in the service (409).
      */
     @PostMapping
     public ResponseEntity<BookingResponse> create(@Valid @RequestBody CreateBookingRequest request,
                                                   @CurrentCustomer CustomerId customer) {
-        unpaidHoldThrottle.recordHoldAttempt(customer);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(reservationService.createBooking(request, customer));
     }

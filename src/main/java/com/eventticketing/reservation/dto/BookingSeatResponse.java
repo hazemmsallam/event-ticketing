@@ -10,7 +10,6 @@ public record BookingSeatResponse(
         String label,
         Long sectionId,
         String sectionName,
-        String currency,
         BigDecimal price,
         BookingSeatStatus status
 ) {
@@ -20,7 +19,6 @@ public record BookingSeatResponse(
                 bs.getSeat().getLabel(),
                 bs.getSectionId(),
                 bs.getSectionName(),
-                bs.getCurrency(),
                 bs.getPrice(),
                 bs.getStatus()
         );

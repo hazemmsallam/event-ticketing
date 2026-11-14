@@ -136,12 +136,12 @@ class ConcurrentBookingIntegrationTest {
         BookingResponse held = reservationService.createBooking(new CreateBookingRequest(eventId,
                 List.of(firstSeat), List.of(new GeneralAdmissionSelection(gaSectionId, 2))), buyer);
         assertThat(held.quantity()).isEqualTo(3);
-        assertThat(held.totalAmount()).isEqualByComparingTo("50.00");
+        assertThat(held.totalAmount()).isEqualByComparingTo("53.00");
 
         BookingResponse edited = reservationService.changeItems(held.id(), buyer.ref(),
                 List.of(secondSeat), List.of(new GeneralAdmissionSelection(gaSectionId, 3)));
         assertThat(edited.seats()).extracting(s -> s.seatId()).containsExactly(secondSeat);
-        assertThat(edited.totalAmount()).isEqualByComparingTo("60.00");
+        assertThat(edited.totalAmount()).isEqualByComparingTo("64.00");
         assertThat(edited.expiresAt()).isEqualTo(held.expiresAt());
 
         // All three GA tickets are held, so nobody else can get one, but the freed seat is open.
@@ -233,10 +233,10 @@ class ConcurrentBookingIntegrationTest {
                 .toList();
         List<SectionItem> sections = new ArrayList<>();
         for (SectionResponse s : hall.sections()) {
-            sections.add(new SectionItem(s.id(), s.name(), s.bookingMode(), s.currency(), s.capacity(),
+            sections.add(new SectionItem(s.id(), s.name(), s.bookingMode(), s.capacity(),
                     s.shapeKind(), s.points(), null, s.color()));
         }
-        sections.add(new SectionItem(null, name, SectionBookingMode.GENERAL_ADMISSION, "JOD", capacity,
+        sections.add(new SectionItem(null, name, SectionBookingMode.GENERAL_ADMISSION, capacity,
                 SectionShape.RECTANGLE, List.of(), null, "#22C55E"));
         return hallService.updateSeats(hall.id(), new UpdateHallSeatsRequest(
                 hall.layoutWidth(), hall.layoutHeight(), seats, null, sections));

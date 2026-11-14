@@ -1,43 +1,21 @@
 package com.eventticketing.catalog.service;
 
 import com.eventticketing.catalog.dto.PointItem;
-import com.eventticketing.common.exception.BusinessRuleException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.awt.geom.Area;
+import java.awt.geom.Path2D;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Rectangle2D;
 import java.util.List;
 
 /**
- * Serialises section boundary polygons to/from the JSON stored in {@code section.points} and
- * answers point-in-polygon queries so seats can be assigned to the section that visually contains
- * them. Points are in the hall's layout-pixel space (the same coordinates seats use).
+ * Point-in-polygon queries over section boundaries, so seats can be assigned to the section that
+ * visually contains them. Points are in the hall's layout-pixel space (the same coordinates seats
+ * use).
  */
 public final class SectionGeometry {
 
     private SectionGeometry() {
-    }
-
-    private static final TypeReference<List<PointItem>> LIST_OF_POINTS = new TypeReference<>() {
-    };
-
-    public static String toJson(ObjectMapper mapper, List<PointItem> points) {
-        try {
-            return mapper.writeValueAsString(points == null ? List.of() : points);
-        } catch (Exception e) {
-            throw new BusinessRuleException("Invalid section geometry.");
-        }
-    }
-
-    public static List<PointItem> fromJson(ObjectMapper mapper, String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            List<PointItem> points = mapper.readValue(json, LIST_OF_POINTS);
-            return points != null ? points : List.of();
-        } catch (Exception e) {
-            return List.of();
-        }
     }
 
     /**
@@ -60,6 +38,33 @@ public final class SectionGeometry {
             }
         }
         return inside;
+    }
+
+    /** Checks the complete rotated footprint, including any concave cutouts. */
+    static boolean containsSeat(List<PointItem> points, double x, double y,
+                                double width, double height, double rotation) {
+        if (points == null || points.size() < 3) {
+            return false;
+        }
+        var transform = AffineTransform.getRotateInstance(Math.toRadians(rotation),
+                x + width / 2, y + height / 2);
+        var outside = new Area(transform.createTransformedShape(new Rectangle2D.Double(x, y, width, height)));
+        outside.subtract(sectionArea(points));
+        return outside.isEmpty();
+    }
+
+    static Area sectionArea(List<PointItem> points) {
+        if (points.size() < 3) {
+            return new Area();
+        }
+        Path2D boundary = new Path2D.Double(Path2D.WIND_EVEN_ODD);
+        boundary.moveTo(points.getFirst().x(), points.getFirst().y());
+        for (int i = 1; i < points.size(); i++) {
+            boundary.lineTo(points.get(i).x(), points.get(i).y());
+        }
+        boundary.closePath();
+
+        return new Area(boundary);
     }
 
     /** Absolute polygon area in layout pixels, used to prefer a specific nested section. */

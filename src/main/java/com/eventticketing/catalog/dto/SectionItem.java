@@ -7,6 +7,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
+import java.math.BigDecimal;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 
 /**
  * One section in a full-hall reconcile ({@code PUT /api/halls/{id}/seats}). A null {@code id}
@@ -26,7 +29,6 @@ public record SectionItem(
         Long id,
         @NotBlank String name,
         @NotNull SectionBookingMode bookingMode,
-        String currency,
         /** Required for GENERAL_ADMISSION; ignored (derived from seats) for SEATED. */
         Integer capacity,
         SectionShape shapeKind,
@@ -34,6 +36,12 @@ public record SectionItem(
         /** Bounding box + rotation used to generate {@code points} from {@code shapeKind} when
          * {@code points} is empty. Ignored when explicit points are supplied. */
         ShapeBox shapeBox,
-        String color
+        String color,
+        String clientKey,
+        @DecimalMin("0.00") @Digits(integer = 9, fraction = 2) BigDecimal serviceFeePerTicket
 ) {
+    public SectionItem(Long id, String name, SectionBookingMode bookingMode, Integer capacity,
+                       SectionShape shapeKind, List<PointItem> points, ShapeBox shapeBox, String color) {
+        this(id, name, bookingMode, capacity, shapeKind, points, shapeBox, color, null, null);
+    }
 }

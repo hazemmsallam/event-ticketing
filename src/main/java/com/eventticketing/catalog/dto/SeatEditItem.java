@@ -22,8 +22,15 @@ public record SeatEditItem(
         @NotNull @Min(0) Integer layoutX,
         @NotNull @Min(0) Integer layoutY,
         @NotNull @Min(-180) @Max(180) Integer rotationDegrees,
-        @NotNull @Min(12) @Max(120) Integer layoutWidth,
-        @NotNull @Min(12) @Max(120) Integer layoutHeight,
-        String sectionName
+        @NotNull @Min(4) @Max(120) Integer layoutWidth,
+        @NotNull @Min(4) @Max(120) Integer layoutHeight,
+        String sectionName,
+        String sectionKey
 ) {
+    public SeatEditItem(Long id, String label, String rowLabel, Integer rowIndex, Integer seatNumber,
+                        Integer layoutX, Integer layoutY, Integer rotationDegrees, Integer layoutWidth,
+                        Integer layoutHeight, String sectionName) {
+        this(id, label, rowLabel, rowIndex, seatNumber, layoutX, layoutY, rotationDegrees,
+                layoutWidth, layoutHeight, sectionName, null);
+    }
 }

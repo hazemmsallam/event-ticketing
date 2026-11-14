@@ -6,8 +6,8 @@ seats at a time, and confirm with payment. Seats stay reserved only until a hold
 payment completes, and the system guarantees the same seat can never be double-booked for the
 same event.
 
-Built as a **modular monolith** with Spring Boot 3 / Java 21 on **MySQL 8**, with **Redis**
-caching the read-heavy availability endpoints.
+Built as a **modular monolith** with Spring Boot 3 / Java 21 on **MySQL 8**. There is no cache and
+no scheduled job: every read goes to MySQL, and lapsed holds are expired lazily.
 
 ---
 
@@ -33,7 +33,6 @@ domain services. (The separate [admin console](https://github.com/hazemmsallam/a
 its own repo that drives the `web.admin` endpoints.)
 
 - **MySQL** is the single source of truth; **Flyway** owns the schema (Hibernate `ddl-auto: none`).
-- **Redis** caches the availability reads with a short TTL, invalidated on booking events (see [Caching](#caching)).
 - The mobile client gets **live data by polling** the seat-map / availability endpoints.
 
 ## Domain model
@@ -79,8 +78,9 @@ booking**, even under concurrent requests; the application doesn't rely on check
 - The service does a friendly pre-check and returns `409 Conflict` for already-taken seats.
 - If a race slips past the pre-check, the unique-index violation on insert is caught and also
   returned as `409`.
-- Expired holds are released two ways: lazily at booking time for the same event, and by a
-  background **sweeper** (`app.reservation.sweep-interval`) for idle events.
+- Expired holds need no background job: every availability and capacity check compares
+  `expires_at` with now, the next booking on the event releases lapsed seats, and reading a
+  lapsed booking marks it `EXPIRED`.
 - General-admission (non-seated) events can't be oversold: capacity is checked under a
   pessimistic row lock on the event.
 
@@ -122,24 +122,6 @@ See `api-examples.http` for ready-to-run requests.
 Database connection is configurable via env vars: `DB_HOST`, `DB_PORT`, `DB_NAME`,
 `DB_USERNAME`, `DB_PASSWORD` (defaults target the bundled docker-compose MySQL).
 
-## Caching
-
-The two live-availability reads — `GET /events/{id}/seats` and `GET /events/{id}/availability` —
-are the hottest endpoints (the mobile app polls them). They're cached in Redis keyed by event id
-with a short TTL (`app.reservation.cache-ttl`, default 2s), so a burst of identical polls collapses
-into one database read every couple of seconds. The cache is evicted for an event the moment a
-booking is created, paid, or cancelled — after the transaction commits, so a concurrent read can't
-repopulate it with pre-commit state.
-
-Two deliberate properties:
-
-- **Correctness never depends on the cache.** A stale entry can only affect what the UI *shows*; the
-  actual booking still goes through the MySQL unique index, so a just-taken seat simply yields a
-  `409 Conflict` on the write. MySQL stays the single source of truth.
-- **Redis is best-effort.** If Redis is unavailable, cache reads/writes/evicts are logged and
-  skipped, and every request falls back to the database — the app keeps working, just without the
-  read-offload.
-
 ## Payments & reconciliation
 
 You can't wrap "charge a card" and "commit to the database" in one atomic transaction — they're
@@ -151,10 +133,11 @@ recorded durably:
    so a retry never double-charges.
 3. **`applyPaymentResult`** (short txn) — record the outcome and confirm the booking.
 
-If step 3 never runs (crash, DB failure, lost response), the `Payment` stays `INITIATED` and a
-**reconciliation job** picks it up: it asks the gateway what actually happened and then either
+If step 3 never runs (crash, DB failure, lost response), the `Payment` stays `INITIATED`.
+`ReservationService.reconcile` can resolve it: it asks the gateway what actually happened and then either
 **confirms** the booking (charge succeeded, hold still valid) or **refunds** the charge (a
-compensating action, when the seats are gone). The idempotency key is what makes this safe —
+compensating action, when the seats are gone). No scheduled job calls it any more, so in-doubt
+payments stay `INITIATED` until it is triggered. The idempotency key is what makes this safe —
 the charge can be looked up and re-applied without ever double-charging. Payment states:
 `INITIATED → SUCCEEDED | FAILED | REFUNDED`.
 
@@ -177,12 +160,7 @@ Interactive OpenAPI docs are served by SpringDoc once the app is running:
 |--------------------------------------|---------|---------|
 | `app.reservation.hold-duration`      | `PT10M` | How long a seat stays reserved before auto-release. |
 | `app.reservation.max-seats-per-booking` | `2`  | Max seats/tickets per booking. |
-| `app.reservation.sweep-interval`     | `PT30S` | How often the sweeper releases expired holds. |
-| `app.reservation.cache-ttl`          | `PT2S`  | How long availability reads are cached in Redis. |
 | `app.seed-demo-data`                 | `false` | Seed the demo catalog on startup. |
-
-Redis connection is configurable via `REDIS_HOST` / `REDIS_PORT` (default `localhost:6379`;
-docker-compose points the app at the bundled `redis` service).
 
 ## Testing
 
@@ -235,7 +213,7 @@ available and able to pull `mysql:8.0`.
   the subject from the security context instead — the ownership check stays exactly the same.
 - Payment is a `FakePaymentGateway` that always approves, but the surrounding flow is
   production-shaped: charge outside the transaction, a durable `Payment` record, and a
-  reconciliation job that confirms-or-refunds in-doubt charges (see [Payments &
+  reconciliation routine that confirms-or-refunds in-doubt charges (see [Payments &
   reconciliation](#payments--reconciliation)).
 - Seated events are bounded by their seats; per-event `maxCapacity` below the hall size is not
   strictly enforced for seated halls (seat availability is the practical cap).

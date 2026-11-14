@@ -4,6 +4,7 @@ import com.eventticketing.catalog.domain.SectionBookingMode;
 import com.eventticketing.catalog.domain.SectionShape;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -16,10 +17,10 @@ import java.util.List;
 public record PresetSectionItem(
         String name,
         SectionBookingMode bookingMode,
-        String currency,
         Integer capacity,
         SectionShape shapeKind,
         List<PointItem> points,
-        String color
+        String color,
+        BigDecimal serviceFeePerTicket
 ) {
 }

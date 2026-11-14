@@ -7,12 +7,12 @@ import java.math.BigDecimal;
 /** One general-admission line, priced at reservation time. */
 public record GeneralAdmissionResponse(
         Long sectionId, String sectionName, int quantity,
-        BigDecimal unitPrice, BigDecimal totalAmount, String currency) {
+        BigDecimal unitPrice, BigDecimal totalAmount) {
 
     public static GeneralAdmissionResponse from(BookingGaLine line) {
         return new GeneralAdmissionResponse(
                 line.getSection() == null ? null : line.getSection().getId(),
                 line.getSectionName(), line.getQuantity(),
-                line.getUnitPrice(), line.lineTotal(), line.getCurrency());
+                line.getUnitPrice(), line.lineTotal());
     }
 }

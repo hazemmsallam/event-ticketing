@@ -11,8 +11,8 @@ public record SeatLayoutItem(
         @NotNull @Min(0) Integer layoutX,
         @NotNull @Min(0) Integer layoutY,
         @NotNull @Min(-180) @Max(180) Integer rotationDegrees,
-        @NotNull @Min(12) @Max(120) Integer layoutWidth,
-        @NotNull @Min(12) @Max(120) Integer layoutHeight,
+        @NotNull @Min(4) @Max(120) Integer layoutWidth,
+        @NotNull @Min(4) @Max(120) Integer layoutHeight,
         String sectionName
 ) {
 }

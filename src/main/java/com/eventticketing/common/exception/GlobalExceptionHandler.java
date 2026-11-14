@@ -2,7 +2,6 @@ package com.eventticketing.common.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -20,18 +19,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiError> handleApiException(ApiException ex, HttpServletRequest request) {
         return build(ex.getStatus(), ex.getMessage(), request, List.of());
-    }
-
-    /**
-     * Throttled callers get the standard {@code Retry-After} header alongside the error body, so a
-     * well-behaved client can back off without guessing.
-     */
-    @ExceptionHandler(TooManyRequestsException.class)
-    public ResponseEntity<ApiError> handleRateLimited(TooManyRequestsException ex,
-                                                      HttpServletRequest request) {
-        return ResponseEntity.status(ex.getStatus())
-                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
-                .body(body(ex.getStatus(), ex.getMessage(), request, List.of()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

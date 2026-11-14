@@ -53,13 +53,12 @@ public class BookingSeat extends BaseEntity {
     @Column(name = "section_name", length = 120)
     private String sectionName;
 
-    /** Currency snapshot (from the section). */
-    @Column(name = "currency", length = 8)
-    private String currency;
-
     /** Price snapshot at hold time, insulating the booking from later price changes. */
     @Column(name = "price", nullable = false, precision = 12, scale = 2)
     private BigDecimal price;
+
+    @Column(name = "service_fee_per_ticket", precision = 12, scale = 2, nullable = false)
+    private BigDecimal serviceFeePerTicket = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)

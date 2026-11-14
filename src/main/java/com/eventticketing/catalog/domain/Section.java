@@ -1,7 +1,9 @@
 package com.eventticketing.catalog.domain;
 
+import com.eventticketing.catalog.dto.PointItem;
 import com.eventticketing.common.domain.BaseEntity;
 import jakarta.persistence.Column;
+import java.math.BigDecimal;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -12,8 +14,11 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
-import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A first-class area of a hall with its own name, booking mode, capacity and boundary geometry —
@@ -29,7 +34,7 @@ import java.math.BigDecimal;
  * (containing selectable {@link Seat}s) and {@link SectionBookingMode#GENERAL_ADMISSION} sections
  * (open areas with an admin-set capacity) at the same time.
  *
- * <p>Boundary geometry is stored as the raw polygon {@link #points} (a JSON array of {@code {x,y}}
+ * <p>Boundary geometry is stored as the raw polygon {@link #points} (a list of {@code {x,y}}
  * in the hall's layout-pixel space, the same coordinate system seats and tables use) so arbitrary,
  * irregular, free-form shapes are representable without a shape-specific schema.
  */
@@ -52,10 +57,6 @@ public class Section extends BaseEntity {
     @Column(name = "booking_mode", nullable = false, length = 24)
     private SectionBookingMode bookingMode;
 
-    /** ISO-ish currency label, e.g. "JOD". Stored per section (a venue property). */
-    @Column(name = "currency", length = 8)
-    private String currency;
-
     /**
      * Admin-configured capacity. Authoritative for {@link SectionBookingMode#GENERAL_ADMISSION};
      * for {@link SectionBookingMode#SEATED} it is derived from the bookable seats and may be null.
@@ -63,13 +64,21 @@ public class Section extends BaseEntity {
     @Column(name = "capacity")
     private Integer capacity;
 
+    @Column(name = "service_fee_per_ticket", precision = 12, scale = 2)
+    private BigDecimal serviceFeePerTicket;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "shape_kind", length = 16)
     private SectionShape shapeKind;
 
-    /** Boundary as a JSON array of points ({@code [{"x":..,"y":..}, ...]}) in layout pixels. */
-    @Column(name = "points", columnDefinition = "TEXT")
-    private String points;
+    /**
+     * Boundary polygon in layout pixels, stored in a MySQL {@code JSON} column as
+     * {@code [{"x":..,"y":..}, ...]}. Hibernate converts it both ways, so the database rejects
+     * malformed JSON and a corrupt value fails loudly on load instead of reading as "no boundary".
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "points", nullable = false, columnDefinition = "json")
+    private List<PointItem> points = new ArrayList<>();
 
     /** Optional display colour (hex, e.g. "#2E75DC") so 2D/3D views can distinguish sections. */
     @Column(name = "color", length = 16)

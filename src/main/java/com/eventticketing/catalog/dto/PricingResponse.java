@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 
 /**
  * A section the audience can pick on the event detail screen: price plus the
- * presentation hints (colour, booking mode, capacity, currency) the mobile
+ * presentation hints (colour, booking mode, capacity) the mobile
  * client needs to render a chair card and route a tap into the right flow
  * (seat picker vs quantity sheet).
  */
@@ -14,7 +14,6 @@ public record PricingResponse(
         Long sectionId,
         String sectionName,
         BigDecimal price,
-        String currency,
         String color,
         SectionBookingMode bookingMode,
         Integer capacity
@@ -25,7 +24,6 @@ public record PricingResponse(
                 s.getId(),
                 s.getName(),
                 p.getPrice(),
-                s.getCurrency(),
                 s.getColor(),
                 s.getBookingMode(),
                 s.getCapacity());

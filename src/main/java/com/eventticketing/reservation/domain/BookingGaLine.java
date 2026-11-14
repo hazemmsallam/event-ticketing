@@ -53,9 +53,8 @@ public class BookingGaLine extends BaseEntity {
     @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal unitPrice;
 
-    /** Currency snapshot (from the section). */
-    @Column(name = "currency", length = 8)
-    private String currency;
+    @Column(name = "service_fee_per_ticket", precision = 12, scale = 2, nullable = false)
+    private BigDecimal serviceFeePerTicket = BigDecimal.ZERO;
 
     public BigDecimal lineTotal() {
         return unitPrice.multiply(BigDecimal.valueOf(quantity));

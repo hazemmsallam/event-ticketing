@@ -51,6 +51,9 @@ public class Booking extends BaseEntity {
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(name = "service_fee", precision = 12, scale = 2, nullable = false)
+    private BigDecimal serviceFee = BigDecimal.ZERO;
+
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 

@@ -5,19 +5,16 @@ import com.eventticketing.catalog.repository.*;
 import com.eventticketing.common.exception.BusinessRuleException;
 import com.eventticketing.common.exception.ConflictException;
 import com.eventticketing.common.security.CustomerId;
-import com.eventticketing.common.security.UnpaidHoldThrottle;
 import com.eventticketing.payment.PaymentResult;
 import com.eventticketing.reservation.config.ReservationProperties;
 import com.eventticketing.reservation.domain.*;
 import com.eventticketing.reservation.dto.*;
 import com.eventticketing.reservation.repository.*;
 import com.eventticketing.reservation.service.ReservationService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.springframework.cache.CacheManager;
 
 import java.math.BigDecimal;
 import java.time.*;
@@ -62,8 +59,6 @@ class MixedBookingServiceTest {
         section.setName(name);
         section.setBookingMode(mode);
         section.setCapacity(capacity);
-        section.setCurrency("JOD");
-        section.setPoints("[]");
         return section;
     }
 
@@ -116,14 +111,9 @@ class MixedBookingServiceTest {
         });
         when(payments.findById(1L)).thenAnswer(call -> Optional.ofNullable(payment));
         when(payments.findEventId(1L)).thenReturn(Optional.of(EVENT));
-        ReservationProperties properties = new ReservationProperties(Duration.ofMinutes(10), 10,
-                Duration.ofSeconds(30), Duration.ofSeconds(2), Duration.ofMinutes(1), 5, Duration.ofMinutes(10));
-        UnpaidHoldThrottle throttle = new UnpaidHoldThrottle(null, properties) {
-            @Override public void onPaymentConfirmed(String ref) { }
-        };
+        ReservationProperties properties = new ReservationProperties(Duration.ofMinutes(10), 10, Duration.ofMinutes(1));
         service = new ReservationService(bookings, bookingSeats, payments, events, seats,
-                proxy(TicketRepository.class), properties, Clock.fixed(now, ZoneOffset.UTC),
-                proxy(CacheManager.class), new ObjectMapper(), throttle);
+                proxy(TicketRepository.class), properties, Clock.fixed(now, ZoneOffset.UTC));
     }
 
     private static GeneralAdmissionSelection ga(long sectionId, Integer quantity) {
@@ -134,7 +124,7 @@ class MixedBookingServiceTest {
         return service.createBooking(new CreateBookingRequest(EVENT, seatIds, List.of(generalAdmission)), customer);
     }
 
-    /** Two seats (2 x 20) + 3 standing (3 x 5) + 1 VIP standing (1 x 12) = 67.00, 6 tickets. */
+    /** Two seats (2 x 20) + 3 standing (3 x 5) + 1 VIP standing (1 x 12) = 67.00 before fees, 6 tickets. */
     private BookingResponse mixed() {
         return book(List.of(1L, 2L), ga(STANDING, 3), ga(VIP_STANDING, 1));
     }
@@ -150,7 +140,7 @@ class MixedBookingServiceTest {
     void mixedOrderHasOneLinePerGaSectionAndOneCombinedTotal() {
         BookingResponse response = mixed();
         assertThat(response.quantity()).isEqualTo(6);
-        assertThat(response.totalAmount()).isEqualByComparingTo("67.00");
+        assertThat(response.totalAmount()).isEqualByComparingTo("73.00");
         assertThat(response.seats()).hasSize(2);
         assertThat(response.generalAdmission()).hasSize(2);
         assertThat(line(response, STANDING).quantity()).isEqualTo(3);
@@ -160,10 +150,29 @@ class MixedBookingServiceTest {
     }
 
     @Test
+    void addsOneServiceFeePerSeatWhenSectionHasNoFee() {
+        event.getPricing().getFirst().setPrice(new BigDecimal("100.00"));
+        BookingResponse response = book(List.of(1L, 2L));
+        assertThat(response.serviceFee()).isEqualByComparingTo("2.00");
+        assertThat(response.totalAmount()).isEqualByComparingTo("202.00");
+    }
+
+    @Test
+    void keepsTheHeldFeeWhenSectionFeeChanges() {
+        seated.setServiceFeePerTicket(new BigDecimal("2.50"));
+        BookingResponse held = book(List.of(1L));
+        assertThat(held.serviceFee()).isEqualByComparingTo("2.50");
+        seated.setServiceFeePerTicket(BigDecimal.ONE);
+        BookingResponse edited = service.changeSeats(1L, customer.ref(), List.of(1L, 2L));
+        assertThat(edited.serviceFee()).isEqualByComparingTo("3.50");
+        assertThat(edited.totalAmount()).isEqualByComparingTo("43.50");
+    }
+
+    @Test
     void seatOnlyOrderHasNoGaLines() {
         BookingResponse response = book(List.of(1L));
         assertThat(response.quantity()).isEqualTo(1);
-        assertThat(response.totalAmount()).isEqualByComparingTo("20.00");
+        assertThat(response.totalAmount()).isEqualByComparingTo("21.00");
         assertThat(response.generalAdmission()).isEmpty();
     }
 
@@ -172,7 +181,7 @@ class MixedBookingServiceTest {
         BookingResponse response = book(null, ga(STANDING, 2), ga(VIP_STANDING, 2));
         assertThat(response.quantity()).isEqualTo(4);
         assertThat(response.seats()).isEmpty();
-        assertThat(response.totalAmount()).isEqualByComparingTo("34.00");
+        assertThat(response.totalAmount()).isEqualByComparingTo("38.00");
     }
 
     static Stream<CreateBookingRequest> invalidRequests() {
@@ -237,13 +246,6 @@ class MixedBookingServiceTest {
         verify(bookings, never()).saveAndFlush(any());
     }
 
-    @Test
-    void differentCurrenciesCannotShareAnOrder() {
-        vipStanding.setCurrency("USD");
-        assertThatThrownBy(this::mixed).isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("same currency");
-    }
-
     // ------------------------------------------------------------------ edit
 
     @Test
@@ -260,7 +262,7 @@ class MixedBookingServiceTest {
         assertThat(line(response, STANDING).quantity()).isEqualTo(5);
         assertThat(line(response, STANDING).unitPrice()).isEqualByComparingTo("5.00");
         assertThat(response.quantity()).isEqualTo(6);
-        assertThat(response.totalAmount()).isEqualByComparingTo("45.00");
+        assertThat(response.totalAmount()).isEqualByComparingTo("51.00");
         assertThat(response.expiresAt()).isEqualTo(expiresAt);
         assertThat(saved.getBookingSeats()).filteredOn(bs -> bs.getStatus() == BookingSeatStatus.RELEASED)
                 .extracting(bs -> bs.getSeat().getId()).containsExactlyInAnyOrder(1L, 2L);
@@ -271,11 +273,11 @@ class MixedBookingServiceTest {
         mixed();
         BookingResponse seatsOnly = service.changeItems(1L, customer.ref(), List.of(1L), null);
         assertThat(seatsOnly.generalAdmission()).isEmpty();
-        assertThat(seatsOnly.totalAmount()).isEqualByComparingTo("20.00");
+        assertThat(seatsOnly.totalAmount()).isEqualByComparingTo("21.00");
 
         BookingResponse gaOnly = service.changeItems(1L, customer.ref(), List.of(), List.of(ga(VIP_STANDING, 2)));
         assertThat(gaOnly.seats()).isEmpty();
-        assertThat(gaOnly.totalAmount()).isEqualByComparingTo("24.00");
+        assertThat(gaOnly.totalAmount()).isEqualByComparingTo("26.00");
     }
 
     @Test
@@ -296,7 +298,7 @@ class MixedBookingServiceTest {
                 List.of(ga(STANDING, 3), ga(VIP_STANDING, 2)))).isInstanceOf(ConflictException.class);
         assertThat(saved.heldSeats()).extracting(bs -> bs.getSeat().getId()).containsExactly(1L, 2L);
         assertThat(saved.generalAdmissionQuantity()).isEqualTo(4);
-        assertThat(saved.getTotalAmount()).isEqualByComparingTo("67.00");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("73.00");
     }
 
     @Test
@@ -313,7 +315,7 @@ class MixedBookingServiceTest {
         BookingResponse response = service.changeSeats(1L, customer.ref(), List.of(3L));
         assertThat(response.generalAdmission()).hasSize(2);
         assertThat(response.quantity()).isEqualTo(5);
-        assertThat(response.totalAmount()).isEqualByComparingTo("47.00");
+        assertThat(response.totalAmount()).isEqualByComparingTo("52.00");
     }
 
     @Test
@@ -322,7 +324,7 @@ class MixedBookingServiceTest {
         service.beginPayment(1L, customer.ref());
         assertThatThrownBy(() -> service.changeItems(1L, customer.ref(), List.of(3L), null))
                 .isInstanceOf(ConflictException.class);
-        assertThat(saved.getTotalAmount()).isEqualByComparingTo("67.00");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("73.00");
     }
 
     // ------------------------------------------------------------------ pay, cancel, expire
@@ -330,7 +332,7 @@ class MixedBookingServiceTest {
     @Test
     void paymentIssuesEveryTicketExactlyOnce() {
         mixed();
-        assertThat(service.beginPayment(1L, customer.ref()).amount()).isEqualByComparingTo("67.00");
+        assertThat(service.beginPayment(1L, customer.ref()).amount()).isEqualByComparingTo("73.00");
         service.applyPaymentResult(1L, PaymentResult.ok("charge-1"));
         service.applyPaymentResult(1L, PaymentResult.ok("charge-1"));
         assertThat(saved.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
@@ -371,12 +373,11 @@ class MixedBookingServiceTest {
     }
 
     @Test
-    void expiryReleasesSeatsAndMarksTheWholeOrderExpired() {
+    void readingALapsedHoldMarksTheWholeOrderExpiredAndReleasesSeats() {
         mixed();
         saved.setExpiresAt(now.minusSeconds(1));
-        when(bookings.findByStatusAndExpiresAtBeforeOrderByExpiresAtAsc(eq(BookingStatus.PENDING_PAYMENT),
-                eq(now), any())).thenReturn(List.of(saved));
-        assertThat(service.releaseExpired()).isEqualTo(1);
+        when(bookings.findById(1L)).thenAnswer(call -> Optional.ofNullable(saved));
+        assertThat(service.getBooking(1L, customer.ref()).status()).isEqualTo(BookingStatus.EXPIRED);
         assertThat(saved.getStatus()).isEqualTo(BookingStatus.EXPIRED);
         assertThat(saved.getBookingSeats()).allSatisfy(line ->
                 assertThat(line.getStatus()).isEqualTo(BookingSeatStatus.RELEASED));

@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * One section on the live event view: its dynamic name/price/currency, booking mode, boundary
+ * One section on the live event view: its dynamic name/price, booking mode, boundary
  * geometry, and current availability. For SEATED sections capacity/counts are derived from the
  * section's seats; for GENERAL_ADMISSION they reflect the configured capacity minus confirmed and
  * held tickets. Carries no hardcoded categories — the client renders whatever it receives.
@@ -18,7 +18,7 @@ public record SectionAvailabilityResponse(
         String name,
         SectionBookingMode bookingMode,
         BigDecimal price,
-        String currency,
+        BigDecimal serviceFeePerTicket,
         int capacity,
         long available,
         long reserved,

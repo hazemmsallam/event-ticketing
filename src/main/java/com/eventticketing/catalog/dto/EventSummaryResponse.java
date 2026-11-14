@@ -29,8 +29,7 @@ public record EventSummaryResponse(
         String hallName,
         String hallAddress,
         boolean seated,
-        BigDecimal startingPrice,
-        String currency
+        BigDecimal startingPrice
 ) {
     public static EventSummaryResponse from(Event e) {
         EventPricing cheapest = e.getPricing().stream()
@@ -51,8 +50,7 @@ public record EventSummaryResponse(
                 e.getHall().getName(),
                 e.getHall().getAddress(),
                 e.getHall().isSeated(),
-                cheapest == null ? null : cheapest.getPrice(),
-                cheapest == null ? null : cheapest.getSection().getCurrency()
+                cheapest == null ? null : cheapest.getPrice()
         );
     }
 }

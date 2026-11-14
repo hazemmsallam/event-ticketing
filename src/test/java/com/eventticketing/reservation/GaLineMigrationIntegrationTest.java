@@ -58,7 +58,7 @@ class GaLineMigrationIntegrationTest {
 
         try (Connection db = connect(); Statement sql = db.createStatement()) {
             ResultSet line = sql.executeQuery(
-                    "SELECT booking_id, event_id, section_id, section_name, quantity, unit_price, currency FROM booking_ga_line");
+                    "SELECT booking_id, event_id, section_id, section_name, quantity, unit_price FROM booking_ga_line");
             assertThat(line.next()).isTrue();
             assertThat(line.getLong("booking_id")).isEqualTo(1);
             assertThat(line.getLong("event_id")).isEqualTo(1);
@@ -66,7 +66,6 @@ class GaLineMigrationIntegrationTest {
             assertThat(line.getString("section_name")).isEqualTo("Standing");
             assertThat(line.getInt("quantity")).isEqualTo(3);
             assertThat(line.getBigDecimal("unit_price")).isEqualByComparingTo("7.50");
-            assertThat(line.getString("currency")).isEqualTo("JOD");
             assertThat(line.next()).as("the seat-only order has no GA line").isFalse();
 
             assertThat(scalar(sql, "SELECT capacity FROM hall WHERE id = 1")).isEqualTo(52);
@@ -75,6 +74,17 @@ class GaLineMigrationIntegrationTest {
                     SELECT COUNT(*) FROM information_schema.columns
                     WHERE table_schema = DATABASE() AND table_name = 'booking'
                       AND column_name IN ('section_id', 'general_admission_quantity')""")).isZero();
+            // V18: points is a native JSON column, and a missing boundary became an empty array.
+            assertThat(scalar(sql, """
+                    SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema = DATABASE() AND table_name = 'section'
+                      AND column_name = 'points' AND data_type = 'json'""")).isEqualTo(1);
+            assertThat(scalar(sql, "SELECT COUNT(*) FROM section WHERE JSON_LENGTH(points) = 0")).isEqualTo(2);
+            // V17: no table carries a currency any more.
+            assertThat(scalar(sql, """
+                    SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema = DATABASE() AND column_name = 'currency'
+                      AND table_name IN ('section', 'booking_seat', 'booking_ga_line')""")).isZero();
         }
     }
 

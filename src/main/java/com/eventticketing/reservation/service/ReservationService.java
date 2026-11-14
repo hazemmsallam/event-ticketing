@@ -11,14 +11,11 @@ import com.eventticketing.catalog.dto.LayoutObjectResponse;
 import com.eventticketing.catalog.dto.PointItem;
 import com.eventticketing.catalog.repository.EventRepository;
 import com.eventticketing.catalog.repository.SeatRepository;
-import com.eventticketing.catalog.service.SectionGeometry;
 import com.eventticketing.common.exception.BusinessRuleException;
 import com.eventticketing.common.exception.ConflictException;
 import com.eventticketing.common.exception.ResourceNotFoundException;
 import com.eventticketing.common.security.CustomerId;
-import com.eventticketing.common.security.UnpaidHoldThrottle;
 import com.eventticketing.payment.PaymentResult;
-import com.eventticketing.reservation.config.CacheNames;
 import com.eventticketing.reservation.config.ReservationProperties;
 import com.eventticketing.reservation.domain.Booking;
 import com.eventticketing.reservation.domain.BookingGaLine;
@@ -41,31 +38,23 @@ import com.eventticketing.reservation.repository.BookingRepository;
 import com.eventticketing.reservation.repository.BookingSeatRepository;
 import com.eventticketing.reservation.repository.PaymentRepository;
 import com.eventticketing.reservation.repository.TicketRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -94,9 +83,6 @@ public class ReservationService {
     private final TicketRepository ticketRepository;
     private final ReservationProperties properties;
     private final Clock clock;
-    private final CacheManager cacheManager;
-    private final ObjectMapper objectMapper;
-    private final UnpaidHoldThrottle unpaidHoldThrottle;
 
     public ReservationService(BookingRepository bookingRepository,
                               BookingSeatRepository bookingSeatRepository,
@@ -105,10 +91,7 @@ public class ReservationService {
                               SeatRepository seatRepository,
                               TicketRepository ticketRepository,
                               ReservationProperties properties,
-                              Clock clock,
-                              CacheManager cacheManager,
-                              ObjectMapper objectMapper,
-                              UnpaidHoldThrottle unpaidHoldThrottle) {
+                              Clock clock) {
         this.bookingRepository = bookingRepository;
         this.bookingSeatRepository = bookingSeatRepository;
         this.paymentRepository = paymentRepository;
@@ -117,9 +100,6 @@ public class ReservationService {
         this.ticketRepository = ticketRepository;
         this.properties = properties;
         this.clock = clock;
-        this.cacheManager = cacheManager;
-        this.objectMapper = objectMapper;
-        this.unpaidHoldThrottle = unpaidHoldThrottle;
     }
 
     // ------------------------------------------------------------------ booking
@@ -169,7 +149,6 @@ public class ReservationService {
             throw new ConflictException(
                     "One or more selected seats were just taken. Please choose different seats.");
         }
-        evictAfterCommit(event.getId());
         return BookingResponse.from(booking);
     }
 
@@ -308,6 +287,7 @@ public class ReservationService {
         line.setSeat(seat);
         applySectionSnapshot(line, seat.getSection());
         line.setPrice(seatPrice(event, seat));
+        line.setServiceFeePerTicket(serviceFee(seat.getSection()));
         line.setStatus(BookingSeatStatus.HELD);
         return line;
     }
@@ -321,36 +301,35 @@ public class ReservationService {
         line.setEvent(event);
         line.setSection(section);
         line.setSectionName(section.getName());
-        line.setCurrency(section.getCurrency());
         line.setUnitPrice(price);
+        line.setServiceFeePerTicket(serviceFee(section));
         line.setQuantity(quantity);
         return line;
     }
 
-    /** Derives quantity and total from the held seats and GA lines; all must share one currency. */
+    private BigDecimal serviceFee(Section section) {
+        var configured = section == null ? null : section.getServiceFeePerTicket();
+        return configured == null ? BigDecimal.ONE : configured;
+    }
+
+    /** Derives quantity and total from the held seats and GA lines. */
     private void recalculateTotals(Booking booking) {
-        Set<String> currencies = new HashSet<>();
         BigDecimal total = BigDecimal.ZERO;
+        BigDecimal fees = BigDecimal.ZERO;
         int quantity = 0;
         for (BookingSeat seat : booking.heldSeats()) {
-            currencies.add(normalizedCurrency(seat.getCurrency()));
             total = total.add(seat.getPrice());
+            fees = fees.add(seat.getServiceFeePerTicket());
             quantity++;
         }
         for (BookingGaLine line : booking.getGaLines()) {
-            currencies.add(normalizedCurrency(line.getCurrency()));
             total = total.add(line.lineTotal());
+            fees = fees.add(line.getServiceFeePerTicket().multiply(BigDecimal.valueOf(line.getQuantity())));
             quantity += line.getQuantity();
         }
-        if (currencies.size() > 1) {
-            throw new BusinessRuleException("All tickets in a booking must use the same currency.");
-        }
         booking.setQuantity(quantity);
-        booking.setTotalAmount(total);
-    }
-
-    private String normalizedCurrency(String currency) {
-        return currency == null || currency.isBlank() ? "" : currency.trim().toUpperCase(Locale.ROOT);
+        booking.setServiceFee(fees);
+        booking.setTotalAmount(total.add(fees));
     }
 
     /**
@@ -537,24 +516,6 @@ public class ReservationService {
         }
         generateTickets(booking);
         maybeMarkSoldOut(booking.getEvent());
-        evictAfterCommit(booking.getEvent().getId());
-        // The customer converted, so their unpaid-hold tally is wiped: paying must never leave
-        // someone waiting out a throttle meant for squatters. Deferred to after commit so a
-        // rolled-back confirmation cannot hand out a fresh budget.
-        clearThrottleAfterCommit(booking.getCustomerRef());
-    }
-
-    private void clearThrottleAfterCommit(String customerRef) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    unpaidHoldThrottle.onPaymentConfirmed(customerRef);
-                }
-            });
-        } else {
-            unpaidHoldThrottle.onPaymentConfirmed(customerRef);
-        }
     }
 
     /**
@@ -779,7 +740,6 @@ public class ReservationService {
         }
         booking.setStatus(BookingStatus.CANCELLED);
         releaseHeldSeats(booking);
-        evictAfterCommit(booking.getEvent().getId());
         return BookingResponse.from(booking);
     }
 
@@ -879,36 +839,15 @@ public class ReservationService {
             throw new ConflictException(
                     "One or more selected seats were just taken. Please choose different seats.");
         }
-        evictAfterCommit(event.getId());
         return BookingResponse.from(booking);
     }
 
     // ------------------------------------------------------------------ expiry
 
-    /** Releases every expired pending hold system-wide. Invoked by the scheduled sweeper. */
-    /** How many expired holds one sweeper transaction will release. */
-    private static final int SWEEP_BATCH_SIZE = 200;
-
-    /**
-     * Releases one bounded batch of expired holds. Bounded on purpose: an expiry wave after a
-     * flash sale could otherwise pull every stale booking into a single transaction, holding row
-     * locks across thousands of updates. The caller loops until a batch comes back short.
-     *
-     * @return the number released; a full batch means more remain
-     */
-    @Transactional
-    public int releaseExpired() {
-        Instant now = clock.instant();
-        List<Booking> expired = bookingRepository.findByStatusAndExpiresAtBeforeOrderByExpiresAtAsc(
-                BookingStatus.PENDING_PAYMENT, now, PageRequest.of(0, SWEEP_BATCH_SIZE));
-        expired.forEach(this::expire);
-        return expired.size();
-    }
-
-    /** True when a batch was full, i.e. {@link #releaseExpired()} should be called again. */
-    public boolean isFullSweepBatch(int released) {
-        return released >= SWEEP_BATCH_SIZE;
-    }
+    // There is no background sweeper. A lapsed hold is marked EXPIRED lazily: by the next booking
+    // or edit on its event (releaseExpiredForEvent), or when its owner reads it (expireIfLapsed).
+    // Availability never depends on that bookkeeping, because every capacity and seat-status
+    // check compares expires_at with now.
 
     private void releaseExpiredForEvent(Long eventId, Instant now) {
         List<Booking> expired = bookingRepository.findByEventIdAndStatusAndExpiresAtBefore(
@@ -931,21 +870,36 @@ public class ReservationService {
 
     // ------------------------------------------------------------------ reads
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public BookingResponse getBooking(Long bookingId, String customerRef) {
-        return BookingResponse.from(getOwnedBooking(bookingId, customerRef));
+        Booking booking = getOwnedBooking(bookingId, customerRef);
+        return BookingResponse.from(expireIfLapsed(booking, clock.instant()));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<BookingResponse> listBookings(String customerRef) {
+        Instant now = clock.instant();
         return bookingRepository.findByCustomerRefOrderByCreatedAtDescIdDesc(customerRef).stream()
-                .map(BookingResponse::from)
+                .map(booking -> BookingResponse.from(expireIfLapsed(booking, now)))
                 .toList();
     }
 
-    // sync = true collapses a burst of concurrent misses for the same event into one
-    // loader call per instance; without it every waiting request runs the query itself.
-    @Cacheable(cacheNames = CacheNames.EVENT_SEAT_MAP, key = "#eventId", sync = true)
+    /**
+     * Marks a lapsed pending hold EXPIRED so its owner sees the real state. The write takes the
+     * same event-then-booking locks as payment and edits, and re-checks under them, so it cannot
+     * race a payment that is confirming the hold.
+     */
+    private Booking expireIfLapsed(Booking booking, Instant now) {
+        if (booking.getStatus() != BookingStatus.PENDING_PAYMENT || !booking.isExpired(now)) {
+            return booking;
+        }
+        Booking locked = getOwnedBookingForUpdate(booking.getId(), booking.getCustomerRef());
+        if (locked.getStatus() == BookingStatus.PENDING_PAYMENT && locked.isExpired(now)) {
+            expire(locked);
+        }
+        return locked;
+    }
+
     @Transactional(readOnly = true)
     public EventSeatMapResponse getSeatMap(Long eventId) {
         Instant now = clock.instant();
@@ -977,7 +931,7 @@ public class ReservationService {
                     seat.getId(), seat.getLabel(), seat.getRowLabel(), seat.getRowIndex(),
                     seat.getSeatNumber(), seat.getLayoutX(), seat.getLayoutY(),
                     seat.getRotationDegrees(), seat.getLayoutWidth(), seat.getLayoutHeight(),
-                    seat.getSectionName(), sectionId, seatPriceOrNull(event, seat), status));
+                    seat.getSection() == null ? null : seat.getSection().getName(), sectionId, seatPriceOrNull(event, seat), status));
         }
 
         List<LayoutObjectResponse> layoutObjects = hall.getLayoutObjects().stream()
@@ -996,20 +950,20 @@ public class ReservationService {
     private SectionAvailabilityResponse sectionAvailability(Event event, Section section,
                                                             Map<Long, long[]> seatedTally, Instant now) {
         BigDecimal price = resolveSectionPrice(event, section);
-        List<PointItem> points = SectionGeometry.fromJson(objectMapper, section.getPoints());
+        List<PointItem> points = section.getPoints();
         if (section.getBookingMode() == SectionBookingMode.GENERAL_ADMISSION) {
             int capacity = section.getCapacity() != null ? section.getCapacity() : 0;
             long confirmed = bookingRepository.sumConfirmedQuantityBySection(event.getId(), section.getId());
             long held = bookingRepository.sumReservedQuantityBySection(event.getId(), section.getId(), now);
             long free = Math.max(0, capacity - (confirmed + held));
             return new SectionAvailabilityResponse(section.getId(), section.getName(),
-                    section.getBookingMode(), price, section.getCurrency(), capacity, free, held,
+                    section.getBookingMode(), price, serviceFee(section), capacity, free, held,
                     confirmed, section.getShapeKind(), points, section.getColor());
         }
         long[] tally = seatedTally.getOrDefault(section.getId(), new long[3]);
         int capacity = (int) (tally[0] + tally[1] + tally[2]);
         return new SectionAvailabilityResponse(section.getId(), section.getName(),
-                section.getBookingMode(), price, section.getCurrency(), capacity, tally[0], tally[1],
+                section.getBookingMode(), price, serviceFee(section), capacity, tally[0], tally[1],
                 tally[2], section.getShapeKind(), points, section.getColor());
     }
 
@@ -1028,9 +982,6 @@ public class ReservationService {
         return statusBySeat;
     }
 
-    // sync = true collapses a burst of concurrent misses for the same event into one
-    // loader call per instance; without it every waiting request runs the query itself.
-    @Cacheable(cacheNames = CacheNames.EVENT_AVAILABILITY, key = "#eventId", sync = true)
     @Transactional(readOnly = true)
     public EventAvailabilityResponse getAvailability(Long eventId) {
         Instant now = clock.instant();
@@ -1121,7 +1072,6 @@ public class ReservationService {
         }
         bookingSeat.setSectionId(section.getId());
         bookingSeat.setSectionName(section.getName());
-        bookingSeat.setCurrency(section.getCurrency());
     }
 
     private BigDecimal generalAdmissionPrice(Event event) {
@@ -1141,40 +1091,6 @@ public class ReservationService {
         // Event capacity is derived from the hall: its seats plus every GA section's capacity.
         if (confirmedUnits >= event.getHall().getCapacity()) {
             event.setStatus(EventStatus.SOLD_OUT);
-        }
-    }
-
-    /**
-     * Evicts the cached availability for an event, deferred until the surrounding transaction
-     * commits so a concurrent read can't repopulate the cache with pre-commit state.
-     */
-    private void evictAfterCommit(Long eventId) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    evictAvailability(eventId);
-                }
-            });
-        } else {
-            evictAvailability(eventId);
-        }
-    }
-
-    private void evictAvailability(Long eventId) {
-        evict(CacheNames.EVENT_SEAT_MAP, eventId);
-        evict(CacheNames.EVENT_AVAILABILITY, eventId);
-    }
-
-    private void evict(String cacheName, Long eventId) {
-        try {
-            Cache cache = cacheManager.getCache(cacheName);
-            if (cache != null) {
-                cache.evictIfPresent(eventId);
-            }
-        } catch (RuntimeException ex) {
-            // Best-effort: a Redis outage must never break a booking. The short TTL heals staleness.
-            log.warn("Cache eviction failed for {} event {}: {}", cacheName, eventId, ex.getMessage());
         }
     }
 }
